@@ -1,0 +1,123 @@
+.ai-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.ai-modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-modal-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  padding: 1.25rem 1.5rem 0.25rem;
+}
+
+.ai-modal-desc {
+  font-size: 0.9rem;
+  color: #6c757d;
+  margin: 0 0 1rem 0;
+  padding: 0 1.5rem;
+}
+
+.ai-modal-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding: 0 1.5rem 1rem;
+  overflow: hidden;
+  min-height: 0;
+  flex: 1;
+}
+
+@media (max-width: 700px) {
+  .ai-modal-compare {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ai-modal-block {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ai-modal-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #495057;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.ai-modal-code {
+  flex: 1;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  line-height: 1.5;
+  overflow: auto;
+  background: #fafafa;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+.ai-modal-btn {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.ai-modal-cancel {
+  background: #fff;
+  border: 1px solid #ced4da;
+  color: #495057;
+}
+
+.ai-modal-cancel:hover {
+  background: #e9ecef;
+}
+
+.ai-modal-apply {
+  background: #667eea;
+  border: none;
+  color: white;
+}
+
+.ai-modal-apply:hover {
+  background: #5a6fd6;
+}

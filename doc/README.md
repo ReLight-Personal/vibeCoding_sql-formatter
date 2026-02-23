@@ -11,6 +11,7 @@
 - [01-1단계-구현요약.md](setup/01-1단계-구현요약.md) — 기초 레이아웃, Core 포매팅, 배너
 - [02-2단계-구현요약.md](setup/02-2단계-구현요약.md) — 규칙 제어 패널, 상태 관리, 실시간 반영
 - [03-3단계-구현요약.md](setup/03-3단계-구현요약.md) — 사용자 정의 템플릿(Regex/Replace), LocalStorage 저장
+- [04-4단계-구현요약.md](setup/04-4단계-구현요약.md) — AI 연동(OpenAI/Anthropic), API Key, 미리보기·적용 UX
 
 ## dev — 개발 가이드
 - [README.md](dev/README.md) — 실행 방법, 기술 스택, 구현 문서 링크

@@ -1,0 +1,135 @@
+.ai-panel {
+  width: 100%;
+  min-width: 280px;
+  background: #f0f4ff;
+  border-top: 1px solid #e0e0e0;
+  padding: 1rem 1.25rem;
+}
+
+.ai-panel-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 0.25rem 0;
+}
+
+.ai-panel-desc {
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin: 0 0 1rem 0;
+  line-height: 1.4;
+}
+
+.ai-form {
+  margin-bottom: 1rem;
+}
+
+.ai-form-row {
+  margin-bottom: 0.75rem;
+}
+
+.ai-form-row label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.25rem;
+}
+
+.ai-form-row select {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.ai-key-input {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: monospace;
+}
+
+.ai-key-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.ai-key-saved {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ai-key-masked {
+  font-size: 0.85rem;
+  font-family: monospace;
+  color: #495057;
+}
+
+.ai-key-reset {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  color: #667eea;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.ai-key-reset:hover {
+  color: #5a6fd6;
+}
+
+.ai-save-key-btn {
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ai-save-key-btn:hover:not(:disabled) {
+  background: #5a6fd6;
+}
+
+.ai-save-key-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ai-key-hint {
+  font-size: 0.75rem;
+  color: #868e96;
+  margin: 0.25rem 0 0 0;
+}
+
+.ai-request-btn {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.ai-request-btn:hover:not(:disabled) {
+  opacity: 0.95;
+}
+
+.ai-request-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -25,3 +25,4 @@ npm run preview
 - [1단계 구현 요약](../setup/01-1단계-구현요약.md) — 기초 레이아웃 및 Core 포매팅
 - [2단계 구현 요약](../setup/02-2단계-구현요약.md) — 규칙 제어 패널 및 상태 관리
 - [3단계 구현 요약](../setup/03-3단계-구현요약.md) — 사용자 정의 템플릿(Regex/Replace), LocalStorage 저장
+- [4단계 구현 요약](../setup/04-4단계-구현요약.md) — AI 연동(OpenAI/Anthropic), API Key, 미리보기·적용 UX
