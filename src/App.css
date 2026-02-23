@@ -11,6 +11,14 @@
   overflow: hidden;
 }
 
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+  width: 280px;
+}
+
 .editor-container {
   display: flex;
   flex: 1;

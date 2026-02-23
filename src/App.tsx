@@ -3,13 +3,28 @@ import './App.css'
 import Banner from './components/Banner'
 import EditorPanel from './components/EditorPanel'
 import RulePanel from './components/RulePanel'
+import TemplatePanel from './components/TemplatePanel'
 import { formatWithRules } from './utils/formatSql'
+import { applyReplaceRules } from './utils/applyReplaceRules'
+import { loadFormatRules, saveFormatRules, loadCustomRules, saveCustomRules } from './utils/storage'
 import { defaultFormatRules, type FormatRulesState } from './types/formatRules'
+import type { ReplaceRuleItem } from './types/customRules'
 
 function App() {
   const [inputSql, setInputSql] = useState('')
   const [outputSql, setOutputSql] = useState('')
-  const [rules, setRules] = useState<FormatRulesState>(defaultFormatRules)
+  const [rules, setRules] = useState<FormatRulesState>(() => loadFormatRules() ?? defaultFormatRules)
+  const [customRules, setCustomRules] = useState<ReplaceRuleItem[]>(() => loadCustomRules() ?? [])
+
+  // LocalStorage에 포맷 규칙 저장
+  useEffect(() => {
+    saveFormatRules(rules)
+  }, [rules])
+
+  // LocalStorage에 사용자 정의 규칙 저장
+  useEffect(() => {
+    saveCustomRules(customRules)
+  }, [customRules])
 
   const runFormat = useCallback(() => {
     if (!inputSql.trim()) {
@@ -17,14 +32,15 @@ function App() {
       return
     }
     try {
-      const formatted = formatWithRules(inputSql, rules)
-      setOutputSql(formatted)
+      let result = formatWithRules(inputSql, rules)
+      result = applyReplaceRules(result, customRules)
+      setOutputSql(result)
     } catch (error) {
       setOutputSql(
         `포매팅 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
       )
     }
-  }, [inputSql, rules])
+  }, [inputSql, rules, customRules])
 
   const handleFormat = () => runFormat()
 
@@ -32,20 +48,25 @@ function App() {
   useEffect(() => {
     if (!inputSql.trim()) return
     try {
-      setOutputSql(formatWithRules(inputSql, rules))
+      let result = formatWithRules(inputSql, rules)
+      result = applyReplaceRules(result, customRules)
+      setOutputSql(result)
     } catch (error) {
       setOutputSql(
         `포매팅 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
       )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 규칙 변경 시에만 재포맷
-  }, [rules])
+  }, [rules, customRules])
 
   return (
     <div className="app">
       <Banner />
       <div className="main-content">
-        <RulePanel rules={rules} onChange={setRules} />
+        <div className="sidebar">
+          <RulePanel rules={rules} onChange={setRules} />
+          <TemplatePanel rules={customRules} onChange={setCustomRules} />
+        </div>
         <div className="editor-container">
           <EditorPanel
             title="Input"
