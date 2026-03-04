@@ -1,17 +1,42 @@
 # SQL-Tailor 문서
 
+## 실행 방법
+
+```bash
+# 의존성 설치
+npm install
+
+# 개발 서버 실행 (Hot reload)
+npm run dev
+
+# 프로덕션 빌드
+npm run build
+
+# 빌드 결과물 로컬 미리보기
+npm run preview
+```
+
+## 기술 스택
+- React 18, TypeScript
+- Vite (빌드·개발 서버)
+- sql-formatter (SQL 포매팅)
+
 ## 폴더 구성
 
 | 폴더 | 설명 |
 |------|------|
-| **setup/** | 단계별 구현 요약 문서 |
-| **dev/** | 개발 환경 및 실행 방법 |
+| **setup/** | 초기셋팅 단계별 구현 요약 문서 |
+| **dev/** | 개발 중 작업내용 요약 문서 |
 
-## setup — 단계별 구현 요약
+## setup — 초기셋팅 단계별 구현 요약
 - [01-1단계-구현요약.md](setup/01-1단계-구현요약.md) — 기초 레이아웃, Core 포매팅, 배너
 - [02-2단계-구현요약.md](setup/02-2단계-구현요약.md) — 규칙 제어 패널, 상태 관리, 실시간 반영
 - [03-3단계-구현요약.md](setup/03-3단계-구현요약.md) — 사용자 정의 템플릿(Regex/Replace), LocalStorage 저장
 - [04-4단계-구현요약.md](setup/04-4단계-구현요약.md) — AI 연동(OpenAI/Anthropic), API Key, 미리보기·적용 UX
 
-## dev — 개발 가이드
-- [README.md](dev/README.md) — 실행 방법, 기술 스택, 구현 문서 링크
+## dev — 개발 중 작업내용 요약
+- [20260227.01.md](dev/20260227.01-shadcn-ui-적용정리.md) — Cursor AI를 통한 shadcn/ui 적용
+- [20260304.01.md](dev/20260304.01-BANNER_IMPROVEMENTS.md) — Windsurf AI를 통한 Banner 컴포넌트 브라우저 크기에 맞춰 동적으로 상단에 고정
+- [20260304.02.md](dev/20260304.02-Banner-컴포넌트-개선.md) — Windsurf AI를 통한 Banner 컴포넌트 숨기기/보이기 기능을 개선하고, 향후 좌우 배치 확장
+- [20260304.03.md](dev/20260304.03-Sidebar_컴포넌트_분리_및_반응형_기능_개선.md) — Windsurf AI를 통한 Sidebar 컴포넌트 분리 및 반응형 기능 개선
+- [20260304.04.md](dev/20260304.04-CSS-리팩토링-완료.md) — Windsurf AI를 통한 CSS 리팩토링 완료
