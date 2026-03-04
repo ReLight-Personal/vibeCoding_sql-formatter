@@ -114,6 +114,10 @@
     padding: 0.75rem 1rem;
     height: 50px;
   }
+
+  .banner-subtitle {
+    display: none;
+  }
 }
 
 .banner-content {
@@ -163,6 +167,7 @@
   .banner-title {
     font-size: 1.1rem;
   }
+
   .banner-subtitle {
     display: none;
   }
