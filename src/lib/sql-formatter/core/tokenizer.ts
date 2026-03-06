@@ -197,6 +197,9 @@ export class SqlTokenizer {
   /**
    * 연속된 identifier 문자들을 하나의 identifier 토큰으로 합침
    * (패턴 매칭이 문자 단위로 쪼개지는 경우 방어)
+   *
+   * ※ MyBatis 플레이스홀더(__MYBATIS_TAG_N__, __MYBATIS_PARAM_N__)는
+   *   merge 경계로 처리 — 다른 identifier와 절대 합치지 않음
    */
   private mergeIdentifiers(tokens: SqlToken[]): SqlToken[] {
     const result: SqlToken[] = []
@@ -206,12 +209,21 @@ export class SqlTokenizer {
       const token = tokens[i]
 
       if (token.type === 'identifier') {
+        // MyBatis 플레이스홀더는 단독 토큰으로 유지
+        if (this.isMybatisPlaceholder(token.value)) {
+          result.push(token)
+          i++
+          continue
+        }
+
         // 다음 토큰도 identifier면 합침 (공백 없이 연속된 경우)
+        // 단, 다음 토큰이 MyBatis 플레이스홀더면 merge 중단
         let merged = token.value
         let j = i + 1
         while (
           j < tokens.length &&
           tokens[j].type === 'identifier' &&
+          !this.isMybatisPlaceholder(tokens[j].value) &&
           tokens[j].position.offset === tokens[i].position.offset + merged.length
         ) {
           merged += tokens[j].value
@@ -234,6 +246,11 @@ export class SqlTokenizer {
     }
 
     return result
+  }
+
+  /** MyBatis 플레이스홀더 토큰 여부 판별 */
+  private isMybatisPlaceholder(value: string): boolean {
+    return /^__MYBATIS_(TAG|PARAM)_\d+__$/.test(value)
   }
 
   isKeyword(value: string): boolean {

@@ -19,7 +19,7 @@ npm run preview
 ## 기술 스택
 - React 18, TypeScript
 - Vite (빌드·개발 서버)
-- sql-formatter (SQL 포매팅)
+- 자체 SQL 포매팅 엔진 (`src/lib/sql-formatter`)
 
 ## 폴더 구성
 
@@ -40,3 +40,9 @@ npm run preview
 - [20260304.02.md](dev/20260304.02-Banner-컴포넌트-개선.md) — Windsurf AI를 통한 Banner 컴포넌트 숨기기/보이기 기능을 개선하고, 향후 좌우 배치 확장
 - [20260304.03.md](dev/20260304.03-Sidebar_컴포넌트_분리_및_반응형_기능_개선.md) — Windsurf AI를 통한 Sidebar 컴포넌트 분리 및 반응형 기능 개선
 - [20260304.04.md](dev/20260304.04-CSS-리팩토링-완료.md) — Windsurf AI를 통한 CSS 리팩토링 완료
+- [20260304.05.md](dev/20260304.05-Sidebar-컴포넌트-개선.md) — Windsurf AI를 통한 Sidebar 컴포넌트 개선
+- [20260305.01.md](dev/20260305.01-sql-formatter-development.md) — Windsurf AI를 통한 자체 SQL 포매터 엔진 초기 개발
+- [20260306.01.md](dev/20260306.01-custom-formatter-migration.md) — Claude AI를 통한 외부 라이브러리 → 자체 엔진 마이그레이션
+- [20260306.02.md](dev/20260306.02-sql-formatter-engine-upgrade.md) — Claude AI를 통한 엔진 전면 업그레이드 (파서·포매터 완성, 방언 배지 UI)
+- [20260306.03.md](dev/20260306.03-realtime-dialect-detection.md) — Claude AI를 통한 실시간 방언 감지 및 App 로직 정리
+- [20260306.04.md](dev/20260306.04-mybatis-engine-fix.md) — Claude AI를 통한 MyBatis 엔진 대응 (CDATA 처리, 한 줄 출력 버그 수정)

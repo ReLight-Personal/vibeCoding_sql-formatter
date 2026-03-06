@@ -8,6 +8,7 @@ export const DIALECT_LABEL: Record<SqlDialect, string> = {
   mysql:       'MySQL',
   postgresql:  'PostgreSQL',
   transactsql: 'T-SQL',
+  mybatis:     'MyBatis',
 }
 
 export interface FormatResult {
@@ -17,7 +18,7 @@ export interface FormatResult {
 }
 
 /** FormatRulesState → FormatOptions 변환 */
-function buildFormatOptions(rules: FormatRulesState) {
+function buildFormatOptions(rules: FormatRulesState, detectedDialect?: SqlDialect) {
   return {
     dialect: 'sql' as const,
     tabWidth: rules.indentEnabled ? rules.tabWidth : 2,
@@ -25,14 +26,16 @@ function buildFormatOptions(rules: FormatRulesState) {
     keywordCase: rules.keywordCaseEnabled ? rules.keywordCase : ('preserve' as const),
     denseOperators: rules.operatorSpacingEnabled ? rules.denseOperators : false,
     commaPosition: (rules.commaPositionEnabled ? rules.commaPosition : 'trailing') as CommaPosition,
+    // MyBatis 감지 시 templateType 자동 설정
+    templateType: (detectedDialect === 'mybatis' ? 'mybatis' : 'none') as 'mybatis' | 'none',
   }
 }
 
 /** SQL 포매팅 + 방언 감지 */
 export function formatWithRules(sql: string, rules: FormatRulesState): FormatResult {
-  const options = buildFormatOptions(rules)
-  const formatter = new SqlFormatter(options)
+  const formatter = new SqlFormatter()
   const detectedDialect = formatter.detectDialect(sql)
+  const options = buildFormatOptions(rules, detectedDialect)
   const formattedSql = formatter.format(sql, options)
 
   return {

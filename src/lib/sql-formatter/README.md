@@ -99,11 +99,31 @@ interface AstNode {
 AST를 순회하며 설정에 따라 포매팅된 SQL 문자열을 생성한다.
 
 **MyBatis 템플릿 처리** (`MyBatisTemplateHandler`)
-- 포매팅 전 MyBatis 태그/파라미터를 플레이스홀더로 치환
-- 포매팅 완료 후 원본 태그/파라미터로 복원
+- 포매팅 전 MyBatis 태그/파라미터를 플레이스홀더로 치환 후 복원
+- `<![CDATA[...]]>` 섹션 보존: open/close를 각각 별도 플레이스홀더로 관리, 포매팅 후 원위치 복원
+- `<where>` / `<set>` 태그: sentinel 키워드 삽입으로 파서가 WHERE/SET 절을 올바르게 인식
 - `templateType: 'mybatis'` 옵션 또는 자동 감지로 활성화
+- `parser.ts`: 주석·CDATA 플레이스홀더 토큰을 단독 노드로 처리 → generic statement에 삼켜지지 않음
 
 ## 지원하는 SQL 방언
+
+### 0. MyBatis XML 템플릿 (자동 감지 우선)
+
+```sql
+/*SQL_ID: com.example.UserDAO.findUser*/
+<![CDATA[
+  SELECT u.id, u.name
+  FROM   users u
+  <where>
+    <if test="name != null">AND u.name = #{name}</if>
+    <if test="status != null">AND u.status = #{status}</if>
+  </where>
+  ORDER BY u.id
+]]>
+```
+
+감지 조건: `#{param}`, `${param}`, MyBatis XML 태그(`<if>`, `<where>`, `<foreach>` 등), `<![CDATA[`  
+처리: CDATA 보존, 태그 치환 후 포매팅, 복원
 
 ### 1. Standard SQL (기본)
 일반적인 ANSI SQL 문법을 기본으로 지원한다.
@@ -203,7 +223,8 @@ formatMybatisSql(`
 ```typescript
 const formatter = new SqlFormatter()
 const dialect = formatter.detectDialect(sql)
-// 반환값: 'plsql' | 'mysql' | 'postgresql' | 'transactsql' | 'sql'
+// 반환값: 'mybatis' | 'plsql' | 'mysql' | 'postgresql' | 'transactsql' | 'sql'
+// 감지 우선순위: mybatis > plsql > mysql > postgresql > transactsql > sql
 ```
 
 ### 유효성 검사
@@ -272,7 +293,12 @@ function buildFormatOptions(rules: FormatRulesState): FormatOptions {
 - [x] UNION / INTERSECT / EXCEPT 처리
 - [x] CREATE TABLE / VIEW 파싱 및 포매팅
 - [x] PL/SQL DECLARE / BEGIN...END / EXCEPTION 블록
-- [x] MyBatis XML 템플릿 지원 (태그 추출 → 복원)
+- [x] MyBatis XML 템플릿 대응
+  - `<![CDATA[...]]>` 보존 및 복원
+  - `<where>` / `<set>` sentinel 키워드로 파서 절 인식
+  - `mergeIdentifiers()` 플레이스홀더 merge 버그 수정
+  - `parseStatement()` comment/플레이스홀더 단독 노드 처리 (한 줄 출력 버그 수정)
+  - `renderTokens()` dot 이후 keyword 공백 처리 버그 수정
 - [x] 키워드 대소문자 변환 (upper / lower / preserve)
 - [x] 들여쓰기 제어 (spaces / tabs, 너비 설정)
 - [x] 콤마 위치 제어 (leading / trailing) — 라이브러리 내부 단일 처리

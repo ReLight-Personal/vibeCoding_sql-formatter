@@ -45,6 +45,21 @@ export class SqlParser {
     const token = tokens[idx]
     if (!token) return null
 
+    // comment 토큰과 MyBatis 플레이스홀더(CDATA_OPEN/CLOSE, TAG)는
+    // statement로 처리하지 않고 단독 노드로 반환 → parse() 루프에서 건너뜀
+    if (token.type === 'comment') {
+      return {
+        node: { type: 'comment_node', tokens: [token] },
+        nextIndex: idx + 1,
+      }
+    }
+    if (token.type === 'identifier' && /^__MYBATIS_(CDATA|TAG)_/.test(token.value)) {
+      return {
+        node: { type: 'mybatis_placeholder_node', tokens: [token] },
+        nextIndex: idx + 1,
+      }
+    }
+
     const upper = token.value.toUpperCase()
 
     // CTE: WITH ... AS (...)

@@ -1,4 +1,4 @@
-export type SqlDialect = 'sql' | 'plsql' | 'mysql' | 'postgresql' | 'transactsql'
+export type SqlDialect = 'sql' | 'plsql' | 'mysql' | 'postgresql' | 'transactsql' | 'mybatis'
 
 export type KeywordCase = 'upper' | 'lower' | 'preserve'
 export type IndentType = 'spaces' | 'tabs'

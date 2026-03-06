@@ -12,6 +12,20 @@ interface ExtractedTemplate {
   placeholders: Map<string, string>
 }
 
+/**
+ * MyBatis 태그 분류
+ * - structural : <where>, <set> → SQL 구조 절을 대체하는 태그
+ *                파서가 WHERE / SET 키워드를 찾을 수 있도록
+ *                키워드 sentinel(__MYBATIS_WHERE__, __MYBATIS_SET__)을 함께 삽입
+ * - block      : <if>, <foreach>, <choose> 등 → 조건/반복 블록
+ * - inline     : #{param}, ${param} → 값 파라미터
+ */
+const STRUCTURAL_TAG_RE =
+  /^<\/?(?:where|set)\b/i
+
+const BLOCK_TAG_RE =
+  /^<\/?(?:if|foreach|choose|when|otherwise|trim|bind|include|sql|mapper|resultMap|select|insert|update|delete)\b/i
+
 class MyBatisTemplateHandler {
   private counter = 0
 
@@ -22,19 +36,47 @@ class MyBatisTemplateHandler {
 
     let sql = input
 
-    // #{param}, ${param} 치환
+    // 0) CDATA → open/close 각각 플레이스홀더로 보존, 내부 SQL은 그대로 노출
+    //    별도 cdataCounter를 사용해 TAG/PARAM 번호와 충돌하지 않도록 함
+    let cdataCounter = 0
+    sql = sql.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_m, inner) => {
+      const openKey  = `__MYBATIS_CDATA_OPEN_${cdataCounter}__`
+      const closeKey = `__MYBATIS_CDATA_CLOSE_${cdataCounter}__`
+      cdataCounter++
+      placeholders.set(openKey,  '<![CDATA[')
+      placeholders.set(closeKey, ']]>')
+      // inner SQL은 그대로 꺼내고 앞뒤에 open/close 키 삽입
+      return `${openKey}\n${inner}\n${closeKey}`
+    })
+
+    // 1) #{param}, ${param} → 인라인 파라미터 플레이스홀더
     sql = sql.replace(/[#$]\{[^}]*\}/g, (match) => {
       const key = `__MYBATIS_PARAM_${this.counter++}__`
       placeholders.set(key, match)
       return key
     })
 
-    // <tag ...> / </tag> 치환
-    sql = sql.replace(/<\/?(?:if|where|set|foreach|choose|when|otherwise|trim|bind|include|sql|mapper|resultMap|select|insert|update|delete)(?:\s[^>]*)?\/?>/gi, (match) => {
-      const key = `__MYBATIS_TAG_${this.counter++}__`
-      placeholders.set(key, match)
-      return key
-    })
+    // 2) XML 태그 치환
+    //    structural 태그(<where>, <set>)는 닫는 태그도 고려하여 처리
+    sql = sql.replace(
+      /<\/?(?:if|where|set|foreach|choose|when|otherwise|trim|bind|include|sql|mapper|resultMap|select|insert|update|delete)(?:\s[^>]*)?\/?>/gi,
+      (match) => {
+        const key = `__MYBATIS_TAG_${this.counter++}__`
+        placeholders.set(key, match)
+
+        // structural 열림 태그: 파서가 절을 인식하도록 sentinel 키워드 삽입
+        // 앞뒤 공백을 반드시 포함하여 인접 토큰과의 merge를 방지
+        if (STRUCTURAL_TAG_RE.test(match) && !match.startsWith('</')) {
+          const tagNameMatch = match.match(/^<(\w+)/i)
+          const tagName = tagNameMatch ? tagNameMatch[1].toUpperCase() : ''
+          if (tagName === 'WHERE') return ` ${key} WHERE `
+          if (tagName === 'SET')   return ` ${key} SET `
+        }
+
+        // 모든 태그 앞뒤에 공백 삽입 → 인접 토큰과 합쳐지는 merge 버그 방지
+        return ` ${key} `
+      }
+    )
 
     return { sql, placeholders }
   }
@@ -42,9 +84,38 @@ class MyBatisTemplateHandler {
   /** 포매팅된 SQL에 플레이스홀더를 원본으로 복원 */
   restore(sql: string, placeholders: Map<string, string>): string {
     let result = sql
+
     for (const [key, original] of placeholders) {
-      result = result.split(key).join(original)
+      // CDATA open/close 플레이스홀더: 줄바꿈 처리 후 복원
+      if (key.includes('_CDATA_OPEN_')) {
+        result = result.split(key).join(original)
+        continue
+      }
+      if (key.includes('_CDATA_CLOSE_')) {
+        // ]]> 앞에 줄바꿈이 없으면 추가
+        result = result.split(key).join('\n' + original)
+        continue
+      }
+
+      // structural 태그의 sentinel 키워드 + 공백도 함께 제거하며 복원
+      const isStructuralOpen =
+        STRUCTURAL_TAG_RE.test(original) && !original.startsWith('</')
+
+      if (isStructuralOpen) {
+        const tagName = original.match(/^<(\w+)/i)?.[1]?.toUpperCase() ?? ''
+        // " PLACEHOLDER WHERE " / " PLACEHOLDER SET " 패턴 → 원본 태그로 복원
+        result = result.split(` ${key} ${tagName} `).join('\n' + original + '\n')
+        result = result.split(` ${key} ${tagName.toLowerCase()} `).join('\n' + original + '\n')
+        result = result.split(`${key} ${tagName} `).join(original + '\n')
+        result = result.split(`${key} ${tagName.toLowerCase()} `).join(original + '\n')
+        result = result.split(` ${key} `).join(original)
+        result = result.split(key).join(original)
+      } else {
+        result = result.split(` ${key} `).join(original)
+        result = result.split(key).join(original)
+      }
     }
+
     return result
   }
 }
@@ -110,32 +181,55 @@ export class SqlFormatter {
   }
 
   private hasMybatisMarkers(sql: string): boolean {
-    return /[#$]\{[^}]*\}|<\/?(?:if|where|set|foreach|choose|when|otherwise|trim|bind)\b/i.test(sql)
+    return /[#$]\{[^}]*\}|<(?:if|where|set|foreach|choose|when|otherwise|trim|bind)\b|<!\[CDATA\[/i.test(sql)
   }
 
   // ─────────────────────────────────────────────────
   // AST 포매팅 진입
   // ─────────────────────────────────────────────────
   private formatAst(ast: AstNode[], cfg: FormatterConfig): string {
-    return ast
-      .map(node => this.formatNode(node, cfg, 0).trimEnd())
-      .filter(s => s.length > 0)
-      .join('\n\n')
+    const parts: string[] = []
+
+    for (const node of ast) {
+      const text = this.formatNode(node, cfg, 0).trimEnd()
+      if (text.length === 0) continue
+
+      // comment, placeholder 노드는 빈 줄 없이 앞 내용에 바로 이어붙임
+      const isInline =
+        node.type === 'comment_node' ||
+        node.type === 'mybatis_placeholder_node'
+
+      if (parts.length === 0 || isInline) {
+        parts.push(text)
+      } else {
+        // 직전 노드가 inline이면 빈 줄 없이, 아니면 빈 줄 하나
+        const prevNode = ast[ast.indexOf(node) - 1]
+        const prevIsInline =
+          prevNode?.type === 'comment_node' ||
+          prevNode?.type === 'mybatis_placeholder_node'
+        parts.push(prevIsInline ? text : '\n' + text)
+      }
+    }
+
+    return parts.join('\n')
   }
 
   private formatNode(node: AstNode, cfg: FormatterConfig, indentLevel: number): string {
     switch (node.type) {
-      case 'select_statement':    return this.formatSelectStatement(node, cfg, indentLevel)
-      case 'insert_statement':    return this.formatInsertStatement(node, cfg, indentLevel)
-      case 'update_statement':    return this.formatUpdateStatement(node, cfg, indentLevel)
-      case 'delete_statement':    return this.formatDeleteStatement(node, cfg, indentLevel)
-      case 'create_statement':    return this.formatCreateStatement(node, cfg, indentLevel)
-      case 'cte_statement':       return this.formatCteStatement(node, cfg, indentLevel)
-      case 'declare_statement':   return this.formatDeclareStatement(node, cfg, indentLevel)
-      case 'block_statement':     return this.formatBlockStatement(node, cfg, indentLevel)
-      case 'set_operation':       return this.formatSetOperation(node, cfg, indentLevel)
-      case 'generic_statement':   return this.formatGenericStatement(node, cfg)
-      default:                    return this.renderTokens(node.tokens, cfg)
+      case 'select_statement':          return this.formatSelectStatement(node, cfg, indentLevel)
+      case 'insert_statement':          return this.formatInsertStatement(node, cfg, indentLevel)
+      case 'update_statement':          return this.formatUpdateStatement(node, cfg, indentLevel)
+      case 'delete_statement':          return this.formatDeleteStatement(node, cfg, indentLevel)
+      case 'create_statement':          return this.formatCreateStatement(node, cfg, indentLevel)
+      case 'cte_statement':             return this.formatCteStatement(node, cfg, indentLevel)
+      case 'declare_statement':         return this.formatDeclareStatement(node, cfg, indentLevel)
+      case 'block_statement':           return this.formatBlockStatement(node, cfg, indentLevel)
+      case 'set_operation':             return this.formatSetOperation(node, cfg, indentLevel)
+      case 'generic_statement':         return this.formatGenericStatement(node, cfg)
+      // comment / MyBatis 플레이스홀더는 토큰 값 그대로 출력
+      case 'comment_node':              return node.tokens.map(t => t.value).join('')
+      case 'mybatis_placeholder_node':  return node.tokens.map(t => t.value).join('')
+      default:                          return this.renderTokens(node.tokens, cfg)
     }
   }
 
@@ -647,33 +741,74 @@ export class SqlFormatter {
     for (let i = 0; i < nonWs.length; i++) {
       const t = nonWs[i]
       const prev = nonWs[i - 1]
-      const next = nonWs[i + 1]
 
       let value = this.applyCase(t, cfg)
 
       // 연산자 공백 처리
       if (t.type === 'operator') {
         if (cfg.denseOperators) {
-          // 앞뒤 공백 제거: parts 마지막 요소에서 trailing space 제거
+          // dense 모드: 앞 공백 제거, 뒤 공백 없이 붙임
           if (parts.length > 0) {
             parts[parts.length - 1] = parts[parts.length - 1].replace(/ $/, '')
           }
           parts.push(value)
           continue
         }
+        // 일반 모드: 연산자 앞 공백 확보 후 뒤에 공백 추가
+        if (parts.length > 0) {
+          const last = parts[parts.length - 1]
+          if (!last.endsWith(' ')) parts[parts.length - 1] = last + ' '
+        }
+        parts.push(value + ' ')
+        continue
       }
 
       // 점(.) 전후 공백 없음
-      if (t.type === 'dot' || (prev && prev.type === 'dot')) {
+      // prev 가 dot 이고, 그 prev 자체가 실질적인 identifier/keyword인 경우만 적용
+      // comment 같은 '구분 불가' 토큰 뒤에는 적용하지 않음
+      const prevIsDot = prev?.type === 'dot'
+      const isDotToken = t.type === 'dot'
+
+      if (isDotToken) {
+        // dot 자체: 앞 공백 제거 후 붙임
         if (parts.length > 0) parts[parts.length - 1] = parts[parts.length - 1].replace(/ $/, '')
         parts.push(value)
         continue
       }
 
-      // 여는 괄호 앞 공백 유지, 닫는 괄호 앞 공백 제거
+      if (prevIsDot) {
+        // dot 바로 다음 토큰: identifier나 number만 공백 없이 붙임
+        // keyword(AS, IN 등)나 다른 타입은 공백 유지
+        if (t.type === 'identifier' || t.type === 'number') {
+          if (parts.length > 0) parts[parts.length - 1] = parts[parts.length - 1].replace(/ $/, '')
+          parts.push(value + ' ')
+          continue
+        }
+      }
+
+      // 닫는 괄호 앞 공백 제거
       if (t.value === ')' && parts.length > 0) {
         parts[parts.length - 1] = parts[parts.length - 1].replace(/ $/, '')
         parts.push(value)
+        continue
+      }
+
+      // 여는 괄호: 뒤에 공백 없이 (다음 토큰이 바로 붙도록)
+      if (t.value === '(') {
+        parts.push(value)
+        continue
+      }
+
+      // 콤마 앞 공백 제거, 뒤에 공백 추가
+      if (t.type === 'comma') {
+        if (parts.length > 0) parts[parts.length - 1] = parts[parts.length - 1].replace(/ $/, '')
+        parts.push(value + ' ')
+        continue
+      }
+
+      // comment 토큰: 뒤에 반드시 공백 추가 (다음 토큰과 붙지 않도록)
+      if (t.type === 'comment') {
+        parts.push(value + ' ')
         continue
       }
 
@@ -710,8 +845,10 @@ export class SqlFormatter {
   // ─────────────────────────────────────────────────
   // 공개 유틸리티
   // ─────────────────────────────────────────────────
-  detectDialect(sql: string): 'sql' | 'plsql' | 'mysql' | 'postgresql' | 'transactsql' {
+  detectDialect(sql: string): 'sql' | 'plsql' | 'mysql' | 'postgresql' | 'transactsql' | 'mybatis' {
     const up = sql.toUpperCase()
+    // MyBatis: #{...}, ${...} 파라미터 또는 MyBatis XML 태그 또는 CDATA 래퍼
+    if (/[#$]\{[^}]*\}|<(?:if|where|set|foreach|choose|when|otherwise|trim|bind)\b|<!\[CDATA\[/i.test(sql)) return 'mybatis'
     if (/\b(DECLARE|BEGIN|END|PROCEDURE|FUNCTION|PACKAGE|TRIGGER|CURSOR|EXCEPTION)\b/.test(up)) return 'plsql'
     if (/\b(LIMIT|AUTO_INCREMENT|TINYINT|ENUM|SHOW|DESCRIBE)\b/.test(up)) return 'mysql'
     if (/\b(SERIAL|BIGSERIAL|BYTEA|JSONB|ARRAY|ILIKE|EXCLUDE)\b/.test(up)) return 'postgresql'
