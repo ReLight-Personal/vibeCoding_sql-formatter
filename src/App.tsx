@@ -24,6 +24,7 @@ import type { AiProvider } from './types/ai'
 function App() {
   const [inputSql, setInputSql] = useState('')
   const [outputSql, setOutputSql] = useState('')
+  const [detectedDialect, setDetectedDialect] = useState('')
   const [rules, setRules] = useState<FormatRulesState>(() => loadFormatRules() ?? defaultFormatRules)
   const [customRules, setCustomRules] = useState<ReplaceRuleItem[]>(() => loadCustomRules() ?? [])
   const [isTopBannerHidden, setIsTopBannerHidden] = useState(false)
@@ -57,16 +58,19 @@ function App() {
   const runFormat = useCallback(() => {
     if (!inputSql.trim()) {
       setOutputSql('')
+      setDetectedDialect('')
       return
     }
     try {
-      let result = formatWithRules(inputSql, rules)
-      result = applyReplaceRules(result, customRules)
-      setOutputSql(result)
+      const result = formatWithRules(inputSql, rules)
+      const finalSql = applyReplaceRules(result.sql, customRules)
+      setOutputSql(finalSql)
+      setDetectedDialect(result.detectedDialectLabel)
     } catch (error) {
       setOutputSql(
         `포매팅 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
       )
+      setDetectedDialect('')
     }
   }, [inputSql, rules, customRules])
 
@@ -75,13 +79,15 @@ function App() {
   useEffect(() => {
     if (!inputSql.trim()) return
     try {
-      let result = formatWithRules(inputSql, rules)
-      result = applyReplaceRules(result, customRules)
-      setOutputSql(result)
+      const result = formatWithRules(inputSql, rules)
+      const finalSql = applyReplaceRules(result.sql, customRules)
+      setOutputSql(finalSql)
+      setDetectedDialect(result.detectedDialectLabel)
     } catch (error) {
       setOutputSql(
         `포매팅 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
       )
+      setDetectedDialect('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 규칙 변경 시에만 재포맷
   }, [rules, customRules])
@@ -125,17 +131,9 @@ function App() {
     }
   }
 
-  const toggleTopBanner = () => {
-    setIsTopBannerHidden(!isTopBannerHidden)
-  }
-
-  const toggleBottomBanner = () => {
-    setIsBottomBannerHidden(!isBottomBannerHidden)
-  }
-
-  const toggleSidebar = () => {
-    setIsSidebarHidden(!isSidebarHidden)
-  }
+  const toggleTopBanner = () => setIsTopBannerHidden(!isTopBannerHidden)
+  const toggleBottomBanner = () => setIsBottomBannerHidden(!isBottomBannerHidden)
+  const toggleSidebar = () => setIsSidebarHidden(!isSidebarHidden)
 
   return (
     <div className="app">
@@ -164,6 +162,7 @@ function App() {
           outputSql={outputSql}
           onOutputChange={setOutputSql}
           onFormat={handleFormat}
+          detectedDialect={detectedDialect}
         />
       </div>
       <Banner position='bottom' isHidden={isBottomBannerHidden} onToggleHide={toggleBottomBanner} />

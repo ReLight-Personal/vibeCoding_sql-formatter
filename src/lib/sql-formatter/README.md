@@ -2,137 +2,160 @@
 
 ## 개요
 
-sql-formatter 라이브러리의 의존성을 제거하고 자체 SQL 포매팅 엔진을 개발하는 프로젝트
+외부 sql-formatter 라이브러리 의존성을 제거하고 자체 SQL 포매팅 엔진을 개발하는 프로젝트.
+Tokenizer → Parser → Formatter 파이프라인 기반의 AST 방식으로 동작한다.
 
 ## 목표
 
 - **독립성**: 외부 라이브러리 의존성 제거
-- **확장성**: 다양한 SQL 방언 지원
+- **확장성**: 다양한 SQL 방언 및 템플릿 엔진 지원
 - **유연성**: 커스텀 포매팅 규칙
 - **성능**: 대용량 SQL 처리 최적화
 
 ## 아키텍처
 
-### 핵심 컴포넌트
-
 ```
 SqlTokenizer → SqlParser → SqlFormatter
-    ↓            ↓           ↓
-  토큰화     →   AST   →  포매팅
+     ↓              ↓            ↓
+   토큰화    →    AST 생성  →  포매팅 출력
 ```
 
-#### 1. SqlTokenizer (tokenizer.ts)
-SQL 문장을 의미 있는 토큰 단위로 분리
+### 1. SqlTokenizer (`core/tokenizer.ts`)
+
+SQL 문자열을 의미 단위의 토큰으로 분리한다.
+
+**토큰 타입** (`types/token.ts`)
+
+```typescript
+type TokenType =
+  | 'keyword'        // SELECT, WHERE, JOIN 등
+  | 'identifier'     // 테이블명, 컬럼명, 백틱 식별자
+  | 'operator'       // =, <>, !=, ::, ||, -> 등
+  | 'string'         // 'text', "text"
+  | 'number'         // 123, 45.67, 1e10
+  | 'comment'        // -- line comment, /* block */
+  | 'whitespace'     // 공백, 탭, 줄바꿈
+  | 'semicolon'      // ;
+  | 'comma'          // ,
+  | 'parenthesis'    // ( )
+  | 'bracket'        // [ ]
+  | 'dot'            // .
+  | 'mybatis_tag'    // <if>, <where>, <foreach> 등 MyBatis XML 태그
+  | 'mybatis_param'  // #{param}, ${param} MyBatis 파라미터
+  | 'placeholder'    // 내부 플레이스홀더 (MyBatis 처리용)
+```
 
 **주요 기능**
-- 키워드 식별 (SELECT, INSERT, UPDATE 등)
-- 리터럴 처리 (문자열, 숫자)
-- 연산자 및 구분자 인식
-- 주석 처리 (`--`, `/* */`)
+- 키워드 식별 (방언 공통 + 확장 키워드 포함)
+- 문자열 리터럴 처리 (이스케이프, 연속 따옴표 `''`)
+- 백틱 식별자 처리 (MySQL)
+- 복합 연산자 우선 매칭 (`<=`, `>=`, `<>`, `::`, `||` 등)
+- MyBatis `#{param}`, `${param}` 및 XML 태그 토큰화
+- 연속 identifier 토큰 병합 후처리 (키워드 재판별 포함)
 
-**토큰 타입**
-```typescript
-type TokenType = 
-  | 'keyword'      // SELECT, WHERE 등
-  | 'identifier'   // 테이블명, 컬럼명
-  | 'operator'    // =, <>, +, -, *, /
-  | 'string'       // 'text', "text"
-  | 'number'       // 123, 45.67
-  | 'comment'      // -- comment, /* comment */
-  | 'whitespace'   // 공백, 탭, 줄바꿈
-  | 'semicolon'    // ;
-  | 'comma'       // ,
-  | 'parenthesis'  // (, )
-  | 'bracket'     // [, ]
-  | 'dot'         // .
-```
+### 2. SqlParser (`core/parser.ts`)
 
-#### 2. SqlParser (parser.ts)
-토큰을 AST(Abstract Syntax Tree)로 변환
+토큰 스트림을 AST(Abstract Syntax Tree)로 변환한다.
+공백 토큰을 사전 제거 후 파싱을 진행한다.
 
-**주요 노드 타입**
+**AstNode 구조**
+
 ```typescript
 interface AstNode {
-  type: string           // 'select_statement', 'from_clause' 등
-  tokens: SqlToken[]    // 원본 토큰
-  children?: AstNode[]   // 자식 노드
+  type: string        // 노드 타입 식별자
+  tokens: SqlToken[]  // 해당 노드가 보유한 원본 토큰
+  children?: AstNode[] // 자식 노드 (절/표현식 분리)
+  value?: string
 }
 ```
 
-**파싱 규칙**
-- **SELECT 문**: select_clause → from_clause → where_clause → group_by → order_by
-- **INSERT 문**: insert_into → values
-- **UPDATE 문**: update → set → where
-- **DELETE 문**: delete_from → where
-- **DDL 문**: create/alter/drop
+**지원하는 Statement 및 파싱 구조**
 
-#### 3. SqlFormatter (formatter.ts)
-AST를 기반으로 SQL 포매팅 적용
+| Statement | 파싱 구조 |
+|-----------|-----------|
+| `SELECT` | select_modifier → select_columns → from_clause → join_clause(s) → where_clause → group_by_clause → having_clause → order_by_clause → limit_clause → set_operation(s) |
+| `INSERT` | table_name → column_list → values_clause \| select_statement → returning_clause |
+| `UPDATE` | table_name → set_clause → from_clause → where_clause → returning_clause |
+| `DELETE` | table_name → using_clause → where_clause → returning_clause |
+| `CREATE TABLE` | table_name → column_defs |
+| `CREATE VIEW` | view_name → select_statement |
+| `CTE (WITH)` | cte_definition(s) → main_statement |
+| `PL/SQL DECLARE` | declare_var(s) → block_statement |
+| `BEGIN...END` | statement(s) → exception_block |
+| `UNION / INTERSECT / EXCEPT` | set_operation → select_statement |
+| `서브쿼리` | subquery → select_statement (재귀 파싱) |
 
-**포매팅 규칙**
-- **키워드 대소문자**: upper/lower/preserve
-- **들여쓰기**: spaces/tabs, 너비 설정
-- **콤마 위치**: leading/trailing
-- **연산자 공백**: dense/normal
-- **줄 길이**: 최대 길이 제한
+**JOIN 지원 타입**
+- `INNER JOIN`, `LEFT [OUTER] JOIN`, `RIGHT [OUTER] JOIN`
+- `FULL [OUTER] JOIN`, `CROSS JOIN`, `NATURAL JOIN`
+- `ON` 조건 / `USING (컬럼)` 절
+
+**조건식 파싱**
+- `AND` / `OR` 기준으로 condition_group 분리
+- 괄호 깊이(depth) 추적으로 서브쿼리 내부 키워드 오인식 방지
+
+### 3. SqlFormatter (`core/formatter.ts`)
+
+AST를 순회하며 설정에 따라 포매팅된 SQL 문자열을 생성한다.
+
+**MyBatis 템플릿 처리** (`MyBatisTemplateHandler`)
+- 포매팅 전 MyBatis 태그/파라미터를 플레이스홀더로 치환
+- 포매팅 완료 후 원본 태그/파라미터로 복원
+- `templateType: 'mybatis'` 옵션 또는 자동 감지로 활성화
 
 ## 지원하는 SQL 방언
 
 ### 1. Standard SQL (기본)
-- 대부분의 기본 SQL 문법 지원
-- 호환성이 가장 높은 기본 설정
+일반적인 ANSI SQL 문법을 기본으로 지원한다.
 
 ### 2. PL/SQL (Oracle)
+
 ```sql
 DECLARE
   v_name VARCHAR2(100);
+  v_count NUMBER := 0;
 BEGIN
   SELECT name INTO v_name FROM users WHERE id = 1;
+  IF v_count > 0 THEN
+    UPDATE users SET grade = 'VIP' WHERE id = 1;
+    COMMIT;
+  END IF;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    ROLLBACK;
 END;
 ```
 
-**특징**
-- 블록 구조: DECLARE-BEGIN-END
-- 제어문: IF-THEN-ELSE, LOOP
-- 예외 처리: EXCEPTION-WHEN
-- 커서: CURSOR, OPEN, FETCH
+지원 구조: DECLARE 블록, BEGIN...END, EXCEPTION...WHEN, CURSOR, LOOP
 
 ### 3. MySQL
+
 ```sql
 SELECT id, name FROM users LIMIT 10 OFFSET 20;
 ```
 
-**특징**
-- LIMIT 구문
-- AUTO_INCREMENT 데이터 타입
-- ENUM, SET 타입
-- 백틱(``) 식별자
+지원 구문: LIMIT/OFFSET, 백틱 식별자, AUTO_INCREMENT, ENUM
 
 ### 4. PostgreSQL
+
 ```sql
-SELECT id, name FROM users WHERE created_at > NOW()::date;
+SELECT id, name FROM users WHERE created_at > NOW()::date RETURNING id;
 ```
 
-**특징**
-- SERIAL, BIGSERIAL 타입
-- JSONB, ARRAY 타입
-- ILIKE 연산자
-- 타입 캐스팅 (::)
+지원 구문: `::` 타입 캐스팅, ILIKE, RETURNING, SERIAL/BIGSERIAL
 
 ### 5. T-SQL (SQL Server)
+
 ```sql
-SELECT TOP 10 id, name FROM users WHERE id = SCOPE_IDENTITY();
+SELECT TOP 10 id, name FROM users;
 ```
 
-**특징**
-- TOP 구문
-- IDENTITY, SCOPE_IDENTITY()
-- GETDATE(), CONVERT() 함수
-- NVARCHAR 타입
+지원 구문: TOP, IDENTITY, NVARCHAR, GETDATE(), CONVERT()
 
 ## API 사용법
 
 ### 기본 사용
+
 ```typescript
 import { SqlFormatter } from './core/formatter'
 
@@ -140,17 +163,18 @@ const formatter = new SqlFormatter({
   keywordCase: 'upper',
   indentType: 'spaces',
   tabWidth: 2,
-  commaPosition: 'trailing'
+  commaPosition: 'trailing',
 })
 
 const formatted = formatter.format('select id,name from users where active=1')
 ```
 
-### 간편 함수
-```typescript
-import { formatSql, formatPlSql, formatMySql } from './index'
+### 간편 함수 (`index.ts`)
 
-// 기본 SQL
+```typescript
+import { formatSql, formatPlSql, formatMySql, formatPostgreSql, formatTSql, formatMybatisSql } from './index'
+
+// Standard SQL
 formatSql('select id from users', { keywordCase: 'upper' })
 
 // PL/SQL
@@ -158,63 +182,74 @@ formatPlSql('declare v_name varchar2(100); begin select name into v_name from us
 
 // MySQL
 formatMySql('select id from users limit 10', { indentType: 'tabs' })
+
+// PostgreSQL
+formatPostgreSql('select id from users where active = true returning id, name')
+
+// T-SQL
+formatTSql('select top 10 id, name from users')
+
+// MyBatis XML 템플릿
+formatMybatisSql(`
+  select id, name from users
+  <where>
+    <if test="name != null">and name = #{name}</if>
+  </where>
+`)
 ```
 
 ### 방언 자동 감지
+
 ```typescript
 const formatter = new SqlFormatter()
-const dialect = formatter.detectDialect(sql) // 'plsql' | 'mysql' | 'postgresql' | 'transactsql' | 'sql'
+const dialect = formatter.detectDialect(sql)
+// 반환값: 'plsql' | 'mysql' | 'postgresql' | 'transactsql' | 'sql'
+```
+
+### 유효성 검사
+
+```typescript
+const { isValid, errors } = formatter.validate(sql)
 ```
 
 ## 설정 옵션
 
-### FormatterConfig
+### `FormatOptions` / `FormatterConfig`
+
 ```typescript
 interface FormatterConfig {
-  defaultDialect: SqlDialect      // 기본 방언
-  maxLineLength: number           // 최대 줄 길이 (기본: 80)
-  indentType: IndentType          // 들여쓰기 방식 (spaces/tabs)
-  keywordCase: KeywordCase        // 키워드 대소문자 (upper/lower/preserve)
-  tabWidth: number               // 탭 너비 (기본: 2)
-  commaPosition: CommaPosition    // 콤마 위치 (leading/trailing)
-  denseOperators: boolean         // 연산자 공백 제거 (기본: false)
-  lineBreakStyle: 'unix' | 'windows'  // 줄바꿈 스타일
+  defaultDialect: SqlDialect           // 기본 방언 (기본: 'sql')
+  maxLineLength: number                // 최대 줄 길이 (기본: 80)
+  indentType: 'spaces' | 'tabs'        // 들여쓰기 방식 (기본: 'spaces')
+  keywordCase: 'upper' | 'lower' | 'preserve'  // 키워드 케이스 (기본: 'upper')
+  tabWidth: number                     // 스페이스 들여쓰기 너비 (기본: 2)
+  commaPosition: 'leading' | 'trailing' // 콤마 위치 (기본: 'trailing')
+  denseOperators: boolean              // 연산자 공백 제거 (기본: false)
+  lineBreakStyle: 'unix' | 'windows'   // 줄바꿈 스타일 (기본: 'unix')
+}
+
+interface FormatOptions extends Partial<FormatterConfig> {
+  dialect?: SqlDialect
+  templateType?: 'none' | 'mybatis'   // 템플릿 엔진 타입
 }
 ```
 
-## 확장 포인트
+### 앱 연동 (`formatSql.ts`)
 
-### 1. 새로운 방언 추가
-```typescript
-// dialects/newsql.ts
-export class NewSqlDialect extends SqlDialect {
-  name = 'newsql'
-  keywords = ['CUSTOM_KEYWORD', ...]
-  // 방언별 파싱 로직 구현
-}
-```
+앱의 `FormatRulesState`를 라이브러리 옵션으로 변환하는 레이어.
+`commaPosition`은 라이브러리 내부에서 단일 처리하므로 후처리 중복 적용 불필요.
 
-### 2. 커스텀 포매팅 규칙
 ```typescript
-// rules/custom-formatting.ts
-export class CustomFormattingRule implements FormattingRule {
-  name = 'custom-rule'
-  apply(node: AstNode, context: FormatContext): void {
-    // 커스텀 포매팅 로직
-  }
-}
-```
+import { formatSql } from '../lib/sql-formatter'
 
-### 3. 템플릿 엔진 확장
-```typescript
-// templates/custom-template.ts
-export class CustomTemplateParser implements TemplateParser {
-  extractSql(template: string): ExtractedSql {
-    // 템플릿에서 SQL 추출
-  }
-  
-  restoreTemplate(sql: string, template: string): string {
-    // 포매팅된 SQL을 템플릿으로 복원
+function buildFormatOptions(rules: FormatRulesState): FormatOptions {
+  return {
+    dialect: 'sql',
+    tabWidth: rules.indentEnabled ? rules.tabWidth : 2,
+    indentType: rules.indentEnabled && rules.indentType === 'tabs' ? 'tabs' : 'spaces',
+    keywordCase: rules.keywordCaseEnabled ? rules.keywordCase : 'preserve',
+    denseOperators: rules.operatorSpacingEnabled ? rules.denseOperators : false,
+    commaPosition: rules.commaPositionEnabled ? rules.commaPosition : 'trailing',
   }
 }
 ```
@@ -222,92 +257,63 @@ export class CustomTemplateParser implements TemplateParser {
 ## 현재 구현 상태
 
 ### ✅ 완료
-- [x] 기본 토크나이저
-- [x] SELECT 문 파싱
-- [x] 키워드 대소문자 변환
-- [x] 기본 들여쓰기 처리
-- [x] 콤마 위치 제어
-- [x] SQL 방언 감지
-- [x] 기존 시스템 연동
 
-### 🚧 진행 중
-- [ ] GROUP BY 절 포매팅
-- [ ] ORDER BY 절 포매팅
-- [ ] JOIN 문법 처리
-- [ ] PL/SQL 블록 구조
+- [x] 기본 토크나이저 (버그 수정, 복합 연산자, 백틱 식별자)
+- [x] SELECT 문 파싱 및 포매팅
+- [x] INSERT 문 파싱 및 포매팅 (VALUES 다중 행, INSERT INTO SELECT)
+- [x] UPDATE 문 파싱 및 포매팅 (SET 절, PostgreSQL FROM 포함)
+- [x] DELETE 문 파싱 및 포매팅 (USING, RETURNING 포함)
+- [x] GROUP BY 절 파싱 및 포매팅
+- [x] ORDER BY 절 파싱 및 포매팅
+- [x] HAVING 절 파싱 및 포매팅
+- [x] JOIN 파싱 및 포매팅 (INNER / LEFT / RIGHT / FULL / CROSS / NATURAL)
+- [x] CTE (WITH 절) 파싱 및 포매팅
+- [x] 서브쿼리 재귀 파싱 및 포매팅
+- [x] UNION / INTERSECT / EXCEPT 처리
+- [x] CREATE TABLE / VIEW 파싱 및 포매팅
+- [x] PL/SQL DECLARE / BEGIN...END / EXCEPTION 블록
+- [x] MyBatis XML 템플릿 지원 (태그 추출 → 복원)
+- [x] 키워드 대소문자 변환 (upper / lower / preserve)
+- [x] 들여쓰기 제어 (spaces / tabs, 너비 설정)
+- [x] 콤마 위치 제어 (leading / trailing) — 라이브러리 내부 단일 처리
+- [x] 연산자 공백 제어 (denseOperators)
+- [x] 줄바꿈 스타일 (unix / windows)
+- [x] SQL 방언 자동 감지
+- [x] 유효성 검사 (`validate()`)
+- [x] 간편 함수 (`formatSql`, `formatPlSql`, `formatMySql`, `formatPostgreSql`, `formatTSql`, `formatMybatisSql`)
 
 ### ⏳ 예정
-- [ ] MyBatis XML 템플릿 지원
-- [ ] 복잡한 서브쿼리 처리
-- [ ] INSERT/UPDATE/DELETE 문법 완성
-- [ ] 성능 최적화
+
+- [ ] LIMIT / FETCH NEXT 방언별 처리 (PostgreSQL `FETCH NEXT n ROWS ONLY`)
+- [ ] MERGE 문 구조화 파싱
+- [ ] ALTER / DROP 구조화 파싱
+- [ ] Window 함수 포매팅 (`OVER (PARTITION BY ... ORDER BY ...)`)
+- [ ] CASE WHEN 표현식 멀티라인 포매팅
 - [ ] 단위 테스트 완성
+- [ ] 성능 최적화 (대용량 SQL)
 
-## 테스트
+## 파일 구조
 
-### 테스트 케이스 구조
-```typescript
-const testCases = [
-  {
-    name: '기본 SELECT 문',
-    input: 'select id, name from users where active = 1',
-    expected: 'SELECT\n  id,\n  name\nFROM\n  users\nWHERE\n  active = 1'
-  },
-  {
-    name: 'PL/SQL 블록',
-    input: 'declare v_name varchar2(100); begin select name into v_name from users; end;',
-    expected: 'DECLARE\n  v_name VARCHAR2(100);\nBEGIN\n  SELECT\n    name\n  INTO\n    v_name\n  FROM\n    users;\nEND;'
-  }
-]
 ```
-
-### 실행 방법
-```bash
-# 테스트 파일 실행
-node -r ts-node src/utils/test-custom-formatter.ts
-
-# 또는 앱 내에서 테스트
-npm run dev
+sql-formatter/
+├── index.ts                  # 진입점, 간편 함수 export
+├── README.md
+├── core/
+│   ├── tokenizer.ts          # SqlTokenizer
+│   ├── parser.ts             # SqlParser
+│   └── formatter.ts          # SqlFormatter + MyBatisTemplateHandler
+└── types/
+    ├── config.ts             # FormatterConfig, FormatOptions
+    └── token.ts              # SqlToken, TokenType
 ```
 
 ## 빌드 및 배포
 
-### 개발 빌드
 ```bash
 npm run build    # TypeScript 컴파일 + Vite 빌드
 npm run dev      # 개발 서버
 ```
 
-### 라이브러리 빌드 (향후)
-```bash
-# 독립 라이브러리로 빌드
-npm run build:lib
-
-# 패키지 게시
-npm publish
-```
-
-## 기여 가이드
-
-### 코드 스타일
-- TypeScript 엄격 모드 사용
-- 함수형 프로그래밍 선호
-- 명확한 변수명 사용
-- 적절한 주석 작성
-
-### 커밋 규칙
-- feat: 새로운 기능
-- fix: 버그 수정
-- docs: 문서 업데이트
-- refactor: 리팩토링
-
-### PR 프로세스
-1. 기능 브랜치 생성
-2. 테스트 케이스 추가
-3. 코드 구현
-4. 테스트 통과 확인
-5. Pull Request 생성
-
 ---
 
-*마지막 업데이트: 2025-03-05*
+*마지막 업데이트: 2026-03-06*

@@ -8,6 +8,7 @@ interface EditorContainerProps {
   outputSql: string
   onOutputChange: (value: string) => void
   onFormat: () => void
+  detectedDialect?: string
 }
 
 export default function EditorContainer({
@@ -16,6 +17,7 @@ export default function EditorContainer({
   outputSql,
   onOutputChange,
   onFormat,
+  detectedDialect,
 }: EditorContainerProps) {
   return (
     <div className="editor-container">
@@ -24,6 +26,7 @@ export default function EditorContainer({
         value={inputSql}
         onChange={onInputChange}
         placeholder="SQL 쿼리를 입력하세요..."
+        badge={detectedDialect}
       />
       <div className="divider">
         <Button onClick={onFormat}>정렬하기 →</Button>

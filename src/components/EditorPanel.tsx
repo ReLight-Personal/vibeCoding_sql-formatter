@@ -7,6 +7,7 @@ interface EditorPanelProps {
   onChange: (value: string) => void
   placeholder?: string
   readOnly?: boolean
+  badge?: string
 }
 
 const EditorPanel = ({
@@ -15,11 +16,13 @@ const EditorPanel = ({
   onChange,
   placeholder,
   readOnly = false,
+  badge,
 }: EditorPanelProps) => {
   return (
     <div className="editor-panel">
       <div className="editor-header">
         <h2 className="editor-title">{title}</h2>
+        {badge && <span className="editor-dialect-badge">{badge}</span>}
       </div>
       <Textarea
         className="editor-textarea"

@@ -10,6 +10,9 @@
 }
 
 .editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 0.85rem 1.1rem;
   background-color: hsl(var(--muted));
   border-bottom: 1px solid hsl(var(--border));
@@ -22,6 +25,18 @@
   letter-spacing: 0.08em;
   color: hsl(var(--muted-foreground));
   margin: 0;
+}
+
+.editor-dialect-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background-color: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary) / 0.3);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .editor-textarea {

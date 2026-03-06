@@ -1,7 +1,20 @@
-//import { format } from 'sql-formatter'
-import { formatSql } from '../lib/sql-formatter'
+import { formatSql, SqlFormatter } from '../lib/sql-formatter'
 import type { FormatRulesState } from '../types/formatRules'
-import type { IndentType, CommaPosition } from '../lib/sql-formatter/types/config'
+import type { IndentType, CommaPosition, SqlDialect } from '../lib/sql-formatter/types/config'
+
+const DIALECT_LABEL: Record<SqlDialect, string> = {
+  sql:         'Standard SQL',
+  plsql:       'PL/SQL',
+  mysql:       'MySQL',
+  postgresql:  'PostgreSQL',
+  transactsql: 'T-SQL',
+}
+
+export interface FormatResult {
+  sql: string
+  detectedDialect: SqlDialect
+  detectedDialectLabel: string
+}
 
 /** sql-formatter에 넘길 옵션 (활성화된 규칙만 반영) */
 function buildFormatOptions(rules: FormatRulesState) {
@@ -15,46 +28,17 @@ function buildFormatOptions(rules: FormatRulesState) {
   }
 }
 
-/** 변경 전 buildFormatOptions 로직 (외부 sql-formatter 라이브러리용)
-function buildFormatOptions(rules: FormatRulesState) {
-  return {
-    language: 'sql' as const,
-    tabWidth: rules.indentEnabled ? rules.tabWidth : 2,
-    useTabs: rules.indentEnabled && rules.indentType === 'tabs',
-    keywordCase: rules.keywordCaseEnabled ? rules.keywordCase : ('preserve' as const),
-    denseOperators: rules.operatorSpacingEnabled ? rules.denseOperators : false,
-  }
-}
-*/
-
-/** 콤마를 줄 끝(trailing) → 줄 앞(leading)으로 변환 */
-function applyCommaLeading(sql: string, indent: string): string {
-  return sql
-    .split('\n')
-    .reduce<string[]>((acc, line) => {
-      const trimmed = line.trimEnd()
-      if (trimmed.endsWith(',')) {
-        acc.push(trimmed.slice(0, -1))
-        acc.push(indent + ',')
-      } else {
-        acc.push(line)
-      }
-      return acc
-    }, [])
-    .join('\n')
-}
-
-/** 현재 규칙에 따라 SQL 포매팅 (콤마 위치는 후처리) */
-export function formatWithRules(sql: string, rules: FormatRulesState): string {
+/** 현재 규칙에 따라 SQL 포매팅 */
+export function formatWithRules(sql: string, rules: FormatRulesState): FormatResult {
   const options = buildFormatOptions(rules)
+  const formatter = new SqlFormatter(options)
 
-  //let result = format(sql, options)
-  let result = formatSql(sql, options)
+  const detectedDialect = formatter.detectDialect(sql)
+  const formattedSql = formatter.format(sql, options)
 
-  if (rules.commaPositionEnabled && rules.commaPosition === 'leading') {
-    const indentStr = rules.indentType === 'tabs' ? '\t' : ' '.repeat(rules.tabWidth)
-    result = applyCommaLeading(result, indentStr)
+  return {
+    sql: formattedSql,
+    detectedDialect,
+    detectedDialectLabel: DIALECT_LABEL[detectedDialect],
   }
-
-  return result
 }

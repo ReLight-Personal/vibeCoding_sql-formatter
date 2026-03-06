@@ -1,60 +1,102 @@
 import type { SqlToken, TokenType, TokenPattern } from '../types/token'
 
 export class SqlTokenizer {
+  // 패턴 순서가 우선순위 — 위에 있을수록 먼저 매칭
   private patterns: TokenPattern[] = [
-    // 문자열 (작은따옴표, 큰따옴표)
-    { type: 'string', pattern: /'(?:[^']|'')*'/g },
-    { type: 'string', pattern: /"(?:[^"]|"")*"/g },
-    
-    // 숫자
-    { type: 'number', pattern: /\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g },
-    
-    // 주석
-    { type: 'comment', pattern: /--.*$/gm },
+    // MyBatis 파라미터: #{param}, ${param}
+    { type: 'mybatis_param', pattern: /[#$]\{[^}]*\}/g },
+
+    // MyBatis XML 태그 (self-closing 포함)
+    { type: 'mybatis_tag', pattern: /<\/?(?:if|where|set|foreach|choose|when|otherwise|trim|bind|include|sql|mapper|resultMap|select|insert|update|delete)(?:\s[^>]*)?\/?>/gi },
+
+    // 블록 주석
     { type: 'comment', pattern: /\/\*[\s\S]*?\*\//g },
-    
+
+    // 라인 주석
+    { type: 'comment', pattern: /--[^\n]*/g },
+
+    // 문자열 (작은따옴표, 이스케이프 처리)
+    { type: 'string', pattern: /'(?:[^'\\]|\\.)*(?:''[^']*)*'/g },
+
+    // 문자열 (큰따옴표 — quoted identifier 겸용)
+    { type: 'string', pattern: /"(?:[^"\\]|\\.)*"/g },
+
+    // 백틱 식별자 (MySQL)
+    { type: 'identifier', pattern: /`[^`]*`/g },
+
+    // 숫자 (정수, 소수, 지수)
+    { type: 'number', pattern: /\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g },
+
     // 세미콜론
     { type: 'semicolon', pattern: /;/g },
-    
+
     // 콤마
     { type: 'comma', pattern: /,/g },
-    
+
     // 괄호
     { type: 'parenthesis', pattern: /[()]/g },
-    
+
     // 대괄호
-    { type: 'bracket', pattern: /[[]]/g },
-    
+    { type: 'bracket', pattern: /[\[\]]/g },
+
     // 점
     { type: 'dot', pattern: /\./g },
-    
-    // 연산자 (우선순위 높음)
-    { type: 'operator', pattern: /(?:<=|>=|<>|!=|==|\|\||&&|=|<|>|\+|-|\*|\/|%|!|~|\||&|\^)/g },
-    
-    // 공백 (가장 낮은 우선순위)
+
+    // 연산자 (복합 연산자 우선)
+    { type: 'operator', pattern: /(?:<=|>=|<>|!=|::|==|\|\||&&|->|=>|=|<|>|\+|-|\*|\/|%|!|~|\||&|\^)/g },
+
+    // 공백 (줄바꿈 포함)
     { type: 'whitespace', pattern: /\s+/g },
   ]
 
-  // 기본 SQL 키워드
+  // SQL 키워드 세트 (방언 공통 + 확장)
   private keywords = new Set([
     // DDL
-    'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'RENAME',
+    'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'RENAME', 'TABLE', 'VIEW',
+    'INDEX', 'SEQUENCE', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'PACKAGE',
+    'DATABASE', 'SCHEMA', 'TABLESPACE', 'COLUMN', 'CONSTRAINT',
+    'PRIMARY', 'FOREIGN', 'KEY', 'REFERENCES', 'UNIQUE', 'CHECK',
+    'DEFAULT', 'TEMPORARY', 'TEMP', 'IF', 'EXISTS',
     // DML
-    'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE',
-    'INTO', 'VALUES', 'SET', 'FROM', 'WHERE', 'GROUP', 'HAVING', 'ORDER',
+    'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE', 'REPLACE',
+    'INTO', 'VALUES', 'SET', 'FROM', 'WHERE', 'GROUP', 'HAVING',
+    'ORDER', 'BY', 'LIMIT', 'OFFSET', 'FETCH', 'NEXT', 'ROWS', 'ONLY',
+    'RETURNING',
+    // JOIN
+    'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'CROSS',
+    'NATURAL', 'ON', 'USING',
+    // 집합 연산
+    'UNION', 'INTERSECT', 'EXCEPT', 'ALL',
+    // CTE
+    'WITH', 'RECURSIVE', 'AS',
     // DCL
-    'GRANT', 'REVOKE', 'COMMIT', 'ROLLBACK', 'SAVEPOINT',
-    // 조인
-    'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'ON', 'USING',
-    // 함수
-    'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'DISTINCT',
+    'GRANT', 'REVOKE', 'COMMIT', 'ROLLBACK', 'SAVEPOINT', 'BEGIN',
+    'TRANSACTION', 'START',
+    // 집계
+    'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'DISTINCT', 'OVER',
+    'PARTITION', 'ROWS', 'RANGE', 'PRECEDING', 'FOLLOWING', 'UNBOUNDED',
+    'CURRENT', 'ROW',
     // 조건
-    'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'IF', 'COALESCE', 'NULLIF',
+    'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'COALESCE', 'NULLIF',
+    'IIF', 'DECODE',
     // 데이터 타입
-    'NULL', 'TRUE', 'FALSE',
-    // 기타
-    'AS', 'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'IS',
-    'UNION', 'INTERSECT', 'EXCEPT', 'WITH', 'RECURSIVE',
+    'NULL', 'TRUE', 'FALSE', 'NOT', 'UNKNOWN',
+    // 논리
+    'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'ILIKE',
+    'IS', 'ANY', 'SOME', 'ALL',
+    // PL/SQL
+    'DECLARE', 'BEGIN', 'END', 'EXCEPTION', 'RAISE', 'LOOP',
+    'WHILE', 'FOR', 'CURSOR', 'OPEN', 'CLOSE', 'FETCH', 'EXIT',
+    'CONTINUE', 'RETURN', 'GOTO', 'TYPE', 'RECORD', 'ROWTYPE',
+    // T-SQL
+    'TOP', 'IDENTITY', 'SCOPE_IDENTITY', 'OUTPUT', 'EXEC', 'EXECUTE',
+    'PRINT', 'GO', 'USE', 'NOCOUNT', 'NOLOCK', 'UPDLOCK',
+    // MySQL
+    'AUTO_INCREMENT', 'UNSIGNED', 'ZEROFILL', 'ENUM', 'SHOW',
+    'DESCRIBE', 'EXPLAIN', 'ENGINE', 'CHARSET',
+    // PostgreSQL
+    'SERIAL', 'BIGSERIAL', 'RETURNING', 'ILIKE', 'SIMILAR',
+    'EXCLUDE', 'DO', 'LANGUAGE', 'PLPGSQL',
   ])
 
   tokenize(input: string): SqlToken[] {
@@ -66,88 +108,155 @@ export class SqlTokenizer {
     while (position < input.length) {
       let matched = false
 
-      // 패턴 순서대로 매칭 시도
-      for (const pattern of this.patterns) {
-        pattern.pattern.lastIndex = 0 // RegExp 상태 초기화
-        const match = pattern.pattern.exec(input.slice(position))
-        
+      for (const patternDef of this.patterns) {
+        // RegExp 상태 초기화 (global flag 부작용 방지)
+        patternDef.pattern.lastIndex = 0
+        const slice = input.slice(position)
+        const match = patternDef.pattern.exec(slice)
+
         if (match && match.index === 0) {
-          const value = match[0]
-          const token: SqlToken = {
-            type: pattern.type,
-            value,
-            position: { line, column, offset: position },
-            originalCase: value
+          const rawValue = match[0]
+          let tokenType: TokenType = patternDef.type
+
+          // 공백이 아닌 경우 keyword/identifier 판별
+          if (tokenType !== 'whitespace'
+            && tokenType !== 'string'
+            && tokenType !== 'number'
+            && tokenType !== 'comment'
+            && tokenType !== 'mybatis_tag'
+            && tokenType !== 'mybatis_param'
+            && tokenType !== 'semicolon'
+            && tokenType !== 'comma'
+            && tokenType !== 'parenthesis'
+            && tokenType !== 'bracket'
+            && tokenType !== 'dot'
+            && tokenType !== 'operator'
+          ) {
+            // identifier 패턴이나 fallback identifier
+            if (this.isKeyword(rawValue)) {
+              tokenType = 'keyword'
+            } else {
+              tokenType = 'identifier'
+            }
+          } else if (tokenType === 'identifier') {
+            // 백틱 식별자 — 그대로 identifier 유지
+          } else if (
+            tokenType !== 'whitespace'
+            && tokenType !== 'string'
+            && tokenType !== 'number'
+            && tokenType !== 'comment'
+            && tokenType !== 'mybatis_tag'
+            && tokenType !== 'mybatis_param'
+          ) {
+            // operator, semicolon 등은 그대로
           }
 
-          // 키워드 식별자 처리
-          if (pattern.type === 'whitespace') {
-            // 공백은 별도 처리
-          } else if (this.isKeyword(value)) {
-            token.type = 'keyword'
-          } else if (this.isIdentifier(value)) {
-            token.type = 'identifier'
+          const token: SqlToken = {
+            type: tokenType,
+            value: rawValue,
+            position: { line, column, offset: position },
+            originalCase: rawValue,
           }
 
           tokens.push(token)
 
           // 위치 업데이트
-          const lines = value.split('\n')
+          const lines = rawValue.split('\n')
           if (lines.length > 1) {
             line += lines.length - 1
             column = lines[lines.length - 1].length + 1
           } else {
-            column += value.length
+            column += rawValue.length
           }
 
-          position += value.length
+          position += rawValue.length
           matched = true
           break
         }
       }
 
       if (!matched) {
-        // 매칭되지 않는 문자는 식별자로 처리
+        // 매칭 안 된 문자 — identifier로 처리
         const char = input[position]
+        const isKw = this.isKeyword(char)
         tokens.push({
-          type: 'identifier',
+          type: isKw ? 'keyword' : 'identifier',
           value: char,
-          position: { line, column, offset: position }
+          position: { line, column, offset: position },
+          originalCase: char,
         })
         position++
         column++
       }
     }
 
-    return tokens
+    // 연속된 identifier 토큰을 하나로 합치는 후처리
+    return this.mergeIdentifiers(tokens)
   }
 
-  private isKeyword(value: string): boolean {
+  /**
+   * 연속된 identifier 문자들을 하나의 identifier 토큰으로 합침
+   * (패턴 매칭이 문자 단위로 쪼개지는 경우 방어)
+   */
+  private mergeIdentifiers(tokens: SqlToken[]): SqlToken[] {
+    const result: SqlToken[] = []
+    let i = 0
+
+    while (i < tokens.length) {
+      const token = tokens[i]
+
+      if (token.type === 'identifier') {
+        // 다음 토큰도 identifier면 합침 (공백 없이 연속된 경우)
+        let merged = token.value
+        let j = i + 1
+        while (
+          j < tokens.length &&
+          tokens[j].type === 'identifier' &&
+          tokens[j].position.offset === tokens[i].position.offset + merged.length
+        ) {
+          merged += tokens[j].value
+          j++
+        }
+
+        // 합쳐진 결과가 keyword인지 재판별
+        const finalType: TokenType = this.isKeyword(merged) ? 'keyword' : 'identifier'
+        result.push({
+          type: finalType,
+          value: merged,
+          position: token.position,
+          originalCase: merged,
+        })
+        i = j
+      } else {
+        result.push(token)
+        i++
+      }
+    }
+
+    return result
+  }
+
+  isKeyword(value: string): boolean {
     return this.keywords.has(value.toUpperCase())
   }
 
-  private isIdentifier(value: string): boolean {
-    // 따옴표로 감싸지 않은 식별자 규칙
-    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)
+  isIdentifier(value: string): boolean {
+    return /^[a-zA-Z_][a-zA-Z0-9_$]*$/.test(value)
   }
 
-  // 토큰 필터링 유틸리티
   filterTokens(tokens: SqlToken[], types: TokenType[]): SqlToken[] {
-    return tokens.filter(token => types.includes(token.type))
+    return tokens.filter(t => types.includes(t.type))
   }
 
-  // 키워드 토큰만 추출
   getKeywordTokens(tokens: SqlToken[]): SqlToken[] {
     return this.filterTokens(tokens, ['keyword'])
   }
 
-  // 식별자 토큰만 추출
   getIdentifierTokens(tokens: SqlToken[]): SqlToken[] {
     return this.filterTokens(tokens, ['identifier'])
   }
 
-  // 공백 제거 토큰
   getNonWhitespaceTokens(tokens: SqlToken[]): SqlToken[] {
-    return this.filterTokens(tokens, ['whitespace'])
+    return tokens.filter(t => t.type !== 'whitespace')
   }
 }

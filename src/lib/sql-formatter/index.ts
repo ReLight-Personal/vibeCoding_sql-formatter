@@ -7,7 +7,7 @@ export type {
   SqlToken,
   TokenType,
   Position,
-  TokenPattern
+  TokenPattern,
 } from './types/token'
 
 export type {
@@ -16,33 +16,33 @@ export type {
   IndentType,
   CommaPosition,
   FormatterConfig,
-  FormatOptions
+  FormatOptions,
 } from './types/config'
 
 export { SqlTokenizer, SqlParser, SqlFormatter }
 
 // 간편 함수들
 export function formatSql(sql: string, options?: FormatOptions): string {
-  const formatter = new SqlFormatter(options)
-  return formatter.format(sql)
+  return new SqlFormatter(options).format(sql, options)
 }
 
 export function formatPlSql(sql: string, options?: FormatOptions): string {
-  const formatter = new SqlFormatter(options)
-  return formatter.format(sql, { ...options, dialect: 'plsql' })
+  return new SqlFormatter(options).format(sql, { ...options, dialect: 'plsql' })
 }
 
 export function formatMySql(sql: string, options?: FormatOptions): string {
-  const formatter = new SqlFormatter(options)
-  return formatter.format(sql, { ...options, dialect: 'mysql' })
+  return new SqlFormatter(options).format(sql, { ...options, dialect: 'mysql' })
 }
 
 export function formatPostgreSql(sql: string, options?: FormatOptions): string {
-  const formatter = new SqlFormatter(options)
-  return formatter.format(sql, { ...options, dialect: 'postgresql' })
+  return new SqlFormatter(options).format(sql, { ...options, dialect: 'postgresql' })
 }
 
 export function formatTSql(sql: string, options?: FormatOptions): string {
-  const formatter = new SqlFormatter(options)
-  return formatter.format(sql, { ...options, dialect: 'transactsql' })
+  return new SqlFormatter(options).format(sql, { ...options, dialect: 'transactsql' })
+}
+
+/** MyBatis XML 템플릿 포매팅 */
+export function formatMybatisSql(sql: string, options?: FormatOptions): string {
+  return new SqlFormatter(options).format(sql, { ...options, templateType: 'mybatis' })
 }
