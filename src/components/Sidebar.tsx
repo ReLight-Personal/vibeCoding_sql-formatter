@@ -42,23 +42,25 @@ export default function Sidebar({
   onToggle,
 }: SidebarProps) {
   return (
-    <div className={`sidebar ${isHidden ? 'is-closed' : ''}`}>
-      <RulePanel rules={rules} onChange={onRulesChange} />
-      <TemplatePanel rules={customRules} onChange={onCustomRulesChange} />
-      <AiPanel
-        provider={aiProvider}
-        apiKey={apiKey}
-        onProviderChange={onAiProviderChange}
-        onApiKeyChange={onApiKeyChange}
-        onSaveKey={onSaveApiKey}
-        onClearKey={onClearApiKey}
-        onRequestAi={onRequestAi}
-        isLoading={aiLoading}
-        keySaved={keySaved}
-      />
+    <div>
+      <div className={`sidebar ${isHidden ? 'is-closed' : ''}`}>
+        <RulePanel rules={rules} onChange={onRulesChange} />
+        <TemplatePanel rules={customRules} onChange={onCustomRulesChange} />
+        <AiPanel
+          provider={aiProvider}
+          apiKey={apiKey}
+          onProviderChange={onAiProviderChange}
+          onApiKeyChange={onApiKeyChange}
+          onSaveKey={onSaveApiKey}
+          onClearKey={onClearApiKey}
+          onRequestAi={onRequestAi}
+          isLoading={aiLoading}
+          keySaved={keySaved}
+        />
+      </div>
       {onToggle && (
-        <button className="sidebar-toggle-button" onClick={onToggle}>
-          {isHidden ? '▶' : '◀'}
+        <button className={`sidebar-toggle-button ${isHidden ? 'is-closed' : ''}`} onClick={onToggle}>
+          {isHidden ? '＞' : '×'}
         </button>
       )}
     </div>

@@ -17,11 +17,10 @@
   flex: 1;
   gap: 1rem;
   margin-top: 60px;
-  max-width: 1200px;
   width: 100%;
   margin-left: auto;
   margin-right: auto;
-  transition: margin-top 0.3s ease-in-out;
+  transition: margin-top 0.2s ease-in-out;
   position: relative;
 }
 
