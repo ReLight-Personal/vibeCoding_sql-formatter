@@ -18,4 +18,5 @@ export interface FormatterConfig {
 export interface FormatOptions extends Partial<FormatterConfig> {
   dialect?: SqlDialect
   templateType?: 'none' | 'mybatis'
+  autoIndent?: boolean
 }

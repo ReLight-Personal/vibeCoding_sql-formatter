@@ -3,6 +3,7 @@ import type { FormatterConfig, FormatOptions } from '../types/config'
 import type { AstNode } from './parser'
 import { SqlTokenizer } from './tokenizer'
 import { SqlParser } from './parser'
+import { applyAutoIndent } from './autoIndentFormatter'
 
 // ─────────────────────────────────────────────────
 // MyBatis 템플릿 처리기
@@ -162,6 +163,11 @@ export class SqlFormatter {
       const tokens = this.tokenizer.tokenize(workSql)
       const ast = this.parser.parse(tokens)
       let result = this.formatAst(ast, cfg)
+
+      // Auto 들여쓰기 모드 처리
+      if (options.autoIndent) {
+        result = applyAutoIndent(result, cfg)
+      }
 
       // 줄바꿈 정규화
       if (cfg.lineBreakStyle === 'windows') {
