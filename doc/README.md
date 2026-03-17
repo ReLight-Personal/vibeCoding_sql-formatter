@@ -46,3 +46,4 @@ npm run preview
 - [20260306.02.md](dev/20260306.02-sql-formatter-engine-upgrade.md) — Claude AI를 통한 엔진 전면 업그레이드 (파서·포매터 완성, 방언 배지 UI)
 - [20260306.03.md](dev/20260306.03-realtime-dialect-detection.md) — Claude AI를 통한 실시간 방언 감지 및 App 로직 정리
 - [20260306.04.md](dev/20260306.04-mybatis-engine-fix.md) — Claude AI를 통한 MyBatis 엔진 대응 (CDATA 처리, 한 줄 출력 버그 수정)
+- [20260317.01.md](dev/20260317.01-auto-indent-feature.md) — Claude AI를 통한 Auto 들여쓰기 기능 개발

@@ -5,7 +5,7 @@ export type KeywordCase = 'upper' | 'lower' | 'preserve'
 export type CommaPosition = 'leading' | 'trailing'
 
 /** 들여쓰기 방식 */
-export type IndentType = 'spaces' | 'tabs'
+export type IndentType = 'spaces' | 'tabs' | 'auto'
 
 /** 적용 가능한 포매팅 규칙 상태 */
 export interface FormatRulesState {

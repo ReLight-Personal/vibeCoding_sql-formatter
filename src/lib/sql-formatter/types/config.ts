@@ -1,7 +1,7 @@
 export type SqlDialect = 'sql' | 'plsql' | 'mysql' | 'postgresql' | 'transactsql' | 'mybatis'
 
 export type KeywordCase = 'upper' | 'lower' | 'preserve'
-export type IndentType = 'spaces' | 'tabs'
+export type IndentType = 'spaces' | 'tabs' | 'auto'
 export type CommaPosition = 'leading' | 'trailing'
 
 export interface FormatterConfig {

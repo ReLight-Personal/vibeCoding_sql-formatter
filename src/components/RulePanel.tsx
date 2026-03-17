@@ -122,6 +122,16 @@ export default function RulePanel({ rules, onChange }: RulePanelProps) {
               />
               Tab
             </label>
+            <label className="radio-label auto-label">
+              <input
+                type="radio"
+                name="indentType"
+                checked={rules.indentType === 'auto'}
+                onChange={() => update({ indentType: 'auto' })}
+              />
+              자동
+              <span className="auto-badge">AUTO</span>
+            </label>
             {rules.indentType === 'spaces' && (
               <div className="rule-inline">
                 <label htmlFor="tabWidth">칸 수</label>
@@ -133,6 +143,12 @@ export default function RulePanel({ rules, onChange }: RulePanelProps) {
                   <option value={2}>2</option>
                   <option value={4}>4</option>
                 </select>
+              </div>
+            )}
+            {rules.indentType === 'auto' && (
+              <div className="auto-desc">
+                <p>키워드마다 줄바꿈 후,</p>
+                <p>가장 긴 키워드 기준 정렬</p>
               </div>
             )}
           </div>
