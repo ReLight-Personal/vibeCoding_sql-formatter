@@ -1,4 +1,5 @@
 import type { SqlToken, TokenType, TokenPattern } from '../types/token'
+import { SQL_KEYWORDS } from './utils/dialectUtils'
 
 export class SqlTokenizer {
   // 패턴 순서가 우선순위 — 위에 있을수록 먼저 매칭
@@ -49,55 +50,7 @@ export class SqlTokenizer {
     { type: 'whitespace', pattern: /\s+/g },
   ]
 
-  // SQL 키워드 세트 (방언 공통 + 확장)
-  private keywords = new Set([
-    // DDL
-    'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'RENAME', 'TABLE', 'VIEW',
-    'INDEX', 'SEQUENCE', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'PACKAGE',
-    'DATABASE', 'SCHEMA', 'TABLESPACE', 'COLUMN', 'CONSTRAINT',
-    'PRIMARY', 'FOREIGN', 'KEY', 'REFERENCES', 'UNIQUE', 'CHECK',
-    'DEFAULT', 'TEMPORARY', 'TEMP', 'IF', 'EXISTS',
-    // DML
-    'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE', 'REPLACE',
-    'INTO', 'VALUES', 'SET', 'FROM', 'WHERE', 'GROUP', 'HAVING',
-    'ORDER', 'BY', 'LIMIT', 'OFFSET', 'FETCH', 'NEXT', 'ROWS', 'ONLY',
-    'RETURNING',
-    // JOIN
-    'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'CROSS',
-    'NATURAL', 'ON', 'USING',
-    // 집합 연산
-    'UNION', 'INTERSECT', 'EXCEPT', 'ALL',
-    // CTE
-    'WITH', 'RECURSIVE', 'AS',
-    // DCL
-    'GRANT', 'REVOKE', 'COMMIT', 'ROLLBACK', 'SAVEPOINT', 'BEGIN',
-    'TRANSACTION', 'START',
-    // 집계
-    'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'DISTINCT', 'OVER',
-    'PARTITION', 'ROWS', 'RANGE', 'PRECEDING', 'FOLLOWING', 'UNBOUNDED',
-    'CURRENT', 'ROW',
-    // 조건
-    'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'COALESCE', 'NULLIF',
-    'IIF', 'DECODE',
-    // 데이터 타입
-    'NULL', 'TRUE', 'FALSE', 'NOT', 'UNKNOWN',
-    // 논리
-    'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'ILIKE',
-    'IS', 'ANY', 'SOME', 'ALL',
-    // PL/SQL
-    'DECLARE', 'BEGIN', 'END', 'EXCEPTION', 'RAISE', 'LOOP',
-    'WHILE', 'FOR', 'CURSOR', 'OPEN', 'CLOSE', 'FETCH', 'EXIT',
-    'CONTINUE', 'RETURN', 'GOTO', 'TYPE', 'RECORD', 'ROWTYPE',
-    // T-SQL
-    'TOP', 'IDENTITY', 'SCOPE_IDENTITY', 'OUTPUT', 'EXEC', 'EXECUTE',
-    'PRINT', 'GO', 'USE', 'NOCOUNT', 'NOLOCK', 'UPDLOCK',
-    // MySQL
-    'AUTO_INCREMENT', 'UNSIGNED', 'ZEROFILL', 'ENUM', 'SHOW',
-    'DESCRIBE', 'EXPLAIN', 'ENGINE', 'CHARSET',
-    // PostgreSQL
-    'SERIAL', 'BIGSERIAL', 'RETURNING', 'ILIKE', 'SIMILAR',
-    'EXCLUDE', 'DO', 'LANGUAGE', 'PLPGSQL',
-  ])
+
 
   tokenize(input: string): SqlToken[] {
     const tokens: SqlToken[] = []
@@ -138,8 +91,6 @@ export class SqlTokenizer {
             } else {
               tokenType = 'identifier'
             }
-          } else if (tokenType === 'identifier') {
-            // 백틱 식별자 — 그대로 identifier 유지
           } else if (
             tokenType !== 'whitespace'
             && tokenType !== 'string'
@@ -254,7 +205,7 @@ export class SqlTokenizer {
   }
 
   isKeyword(value: string): boolean {
-    return this.keywords.has(value.toUpperCase())
+    return SQL_KEYWORDS.has(value.toUpperCase())
   }
 
   isIdentifier(value: string): boolean {

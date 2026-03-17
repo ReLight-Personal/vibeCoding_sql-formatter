@@ -10,7 +10,7 @@
  */
 
 import type { FormatterConfig } from '../types/config'
-import { extractSubqueries, restoreSubqueries, presplitByKeywords, AUTO_CLAUSE_KEYWORDS, applyCase } from './subqueryUtils'
+import { extractSubqueries, restoreSubqueries, presplitByKeywords, AUTO_CLAUSE_KEYWORDS, applyCase } from './utils/subqueryUtils'
 
 // ─────────────────────────────────────────────────
 // 유틸 함수

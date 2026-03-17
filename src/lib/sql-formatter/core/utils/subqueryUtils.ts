@@ -6,7 +6,7 @@
  * autoIndentFormatter.ts와 formatter.ts가 공유하는 서브쿼리 처리 로직
  */
 
-import type { FormatterConfig } from '../types/config'
+import type { FormatterConfig } from '../../types/config'
 
 // ─────────────────────────────────────────────────
 // SQL 함수명 목록 (alias 오탐 방지용)
