@@ -47,3 +47,6 @@ npm run preview
 - [20260306.03.md](dev/20260306.03-realtime-dialect-detection.md) — Claude AI를 통한 실시간 방언 감지 및 App 로직 정리
 - [20260306.04.md](dev/20260306.04-mybatis-engine-fix.md) — Claude AI를 통한 MyBatis 엔진 대응 (CDATA 처리, 한 줄 출력 버그 수정)
 - [20260317.01.md](dev/20260317.01-auto-indent-feature.md) — Claude AI를 통한 Auto 들여쓰기 기능 개발
+- [20260317.02.md](dev/20260317.02-Auto-Indent-리팩토링.md) — Claude AI를 통한 Auto 들여쓰기 리팩토링
+- [20260317.03.md](dev/20260317.03-서브쿼리-처리-로직-리팩토링.md) — Claude AI를 통한 서브쿼리 처리 로직 분리 (subqueryUtils.ts 신규 생성)
+- [20260317.04.md](dev/20260317.04-서브쿼리-버그수정.md) — Claude AI를 통한 서브쿼리 처리 버그 수정 4건 (들여쓰기, DECODE 함수 인식, AND 빈 줄)

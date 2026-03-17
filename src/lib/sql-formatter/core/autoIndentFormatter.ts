@@ -137,13 +137,14 @@ function formatBlock(sql: string, cfg: FormatterConfig, baseIndent: string): str
 
   // ── 6. 서브쿼리 플레이스홀더 복원 ──
   result = restoreSubqueries(
-    result, 
-    extracted.subBlocks, 
+    result,
+    extracted.subBlocks,
     cfg,
-    (inner) => {
+    (inner, subBaseIndent) => {
       // 내부 서브쿼리도 auto 포매팅 적용
+      // restoreSubqueries 가 전달한 subBaseIndent 를 기준으로 formatBlock 실행
       const normalizedInner = presplitByKeywords(inner, cfg)
-      return formatBlock(normalizedInner, cfg, baseIndent)
+      return formatBlock(normalizedInner, cfg, subBaseIndent)
     }
   )
 

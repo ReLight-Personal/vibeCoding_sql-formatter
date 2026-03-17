@@ -4,7 +4,7 @@ import type { AstNode } from './parser'
 import { SqlTokenizer } from './tokenizer'
 import { SqlParser } from './parser'
 import { applyAutoIndent } from './autoIndentFormatter'
-import { extractSubqueries, restoreSubqueries, presplitByKeywords } from './subqueryUtils'
+import { extractSubqueries, restoreSubqueries, presplitByKeywords, indentBlock } from './subqueryUtils'
 
 // ─────────────────────────────────────────────────
 // MyBatis 템플릿 처리기
@@ -168,6 +168,10 @@ export class SqlFormatter {
       // Auto 들여쓰기 모드 처리
       if (options.autoIndent) {
         result = applyAutoIndent(result, cfg)
+      } else {
+        // 비-auto 모드: AST 파서가 subquery 노드를 인식하지 못한 인라인 서브쿼리를
+        // 유틸리티로 추출·재포매팅하여 올바른 들여쓰기를 적용한다.
+        result = this.applySubqueryFormatting(result, cfg)
       }
 
       // 줄바꿈 정규화
@@ -702,54 +706,89 @@ export class SqlFormatter {
   }
 
   // ─────────────────────────────────────────────────
-  // 서브쿼리 포매팅 (재귀)
+  // 비-auto 모드 서브쿼리 후처리
+  //
+  // formatAst 결과에서 인라인으로 남은 서브쿼리를
+  // extractSubqueries / restoreSubqueries 로 분리·들여쓰기한다.
+  //
+  // ※ 최상위 SQL 전체에 presplitByKeywords 를 적용하지 않는다.
+  //   formatAst 가 이미 절 단위 줄바꿈을 완료했으므로
+  //   재적용하면 WHERE 조건의 AND 앞에 빈 줄이 추가된다. (문제 4)
+  //   presplitByKeywords 는 추출된 서브쿼리 내부에만 적용한다.
+  // ─────────────────────────────────────────────────
+  private applySubqueryFormatting(sql: string, cfg: FormatterConfig): string {
+    // 서브쿼리 추출 (presplit 없이 원본 그대로)
+    const extracted = extractSubqueries(sql)
+    if (extracted.subBlocks.length === 0) return sql
+
+    const restored = restoreSubqueries(
+      extracted.sql,
+      extracted.subBlocks,
+      cfg,
+      // formatInner: 추출된 서브쿼리 내부에만 presplit + 재귀 적용
+      (inner, baseIndent) => {
+        const presplit = presplitByKeywords(inner, cfg)
+        const innerExtracted = extractSubqueries(presplit)
+        if (innerExtracted.subBlocks.length > 0) {
+          const innerRestored = restoreSubqueries(
+            innerExtracted.sql,
+            innerExtracted.subBlocks,
+            cfg,
+            (deepInner, deepBaseIndent) =>
+              this.formatInnerSubquery(deepInner, deepBaseIndent, cfg)
+          )
+          return indentBlock(innerRestored, baseIndent)
+        }
+        return indentBlock(presplit, baseIndent)
+      }
+    )
+
+    return restored
+  }
+
+  /**
+   * 재귀 서브쿼리 포매팅 헬퍼
+   * baseIndent 를 전달받아 내부 줄에 올바른 들여쓰기를 적용한다.
+   */
+  private formatInnerSubquery(sql: string, baseIndent: string, cfg: FormatterConfig): string {
+    const presplit = presplitByKeywords(sql, cfg)
+    const extracted = extractSubqueries(presplit)
+    if (extracted.subBlocks.length > 0) {
+      const restored = restoreSubqueries(
+        extracted.sql,
+        extracted.subBlocks,
+        cfg,
+        (inner, innerBase) => this.formatInnerSubquery(inner, innerBase, cfg)
+      )
+      return indentBlock(restored, baseIndent)
+    }
+    return indentBlock(presplit, baseIndent)
+  }
+
+  // ─────────────────────────────────────────────────
+  // 서브쿼리 포매팅 (재귀) — AST subquery 노드 전용
   // ─────────────────────────────────────────────────
   private formatSubquery(node: AstNode, cfg: FormatterConfig, indent: number): string {
     const selNode = node.children?.find(c => c.type === 'select_statement')
     if (selNode) {
-      // 서브쿼리 내용을 먼저 기본 포매팅으로 평탄화
+      const indentStr = this.indent(cfg, indent)
       let flattened = this.formatSelectStatement(selNode, cfg, 0)
-      
-      // 키워드 기준으로 미리 줄바꿈 적용
       flattened = presplitByKeywords(flattened, cfg)
-      
-      // 서브쿼리 처리 유틸리티 적용
+
       const extracted = extractSubqueries(flattened)
       if (extracted.subBlocks.length > 0) {
-        // 중첩 서브쿼리가 있으면 재귀적으로 처리
         const processed = restoreSubqueries(
-          extracted.sql, 
-          extracted.subBlocks, 
+          extracted.sql,
+          extracted.subBlocks,
           cfg,
-          (inner) => {
-            // 내부 서브쿼리도 동일한 방식으로 처리
-            const innerExtracted = extractSubqueries(inner)
-            if (innerExtracted.subBlocks.length > 0) {
-              return restoreSubqueries(
-                innerExtracted.sql, 
-                innerExtracted.subBlocks, 
-                cfg
-              )
-            }
-            return inner
-          }
+          (inner, baseIndent) => this.formatInnerSubquery(inner, baseIndent, cfg)
         )
-        // 들여쓰기 적용
-        const lines = processed.split('\n')
-        const indentedLines = lines.map(line => 
-          line.trim() ? this.indent(cfg, indent) + line.trim() : ''
-        )
-        return indentedLines.join('\n').trim()
+        return indentBlock(processed, indentStr)
       }
-      
-      // 단순 서브쿼리는 기본 들여쓰기만 적용
-      const lines = flattened.split('\n')
-      const indentedLines = lines.map(line => 
-        line.trim() ? this.indent(cfg, indent) + line.trim() : ''
-      )
-      return indentedLines.join('\n').trim()
+
+      return indentBlock(flattened, indentStr)
     }
-    
+
     // generic fallback
     const inner = node.tokens
       .filter(t => t.value !== '(' && t.value !== ')')

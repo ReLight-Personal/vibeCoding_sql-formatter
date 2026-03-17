@@ -9,6 +9,35 @@
 import type { FormatterConfig } from '../types/config'
 
 // ─────────────────────────────────────────────────
+// SQL 함수명 목록 (alias 오탐 방지용)
+// 서브쿼리 바로 뒤에 이 이름이 오더라도 alias로 취급하지 않음
+// ─────────────────────────────────────────────────
+export const SQL_FUNCTION_KEYWORDS: string[] = [
+  // Oracle 전용
+  'DECODE', 'NVL', 'NVL2',
+  // 표준 SQL / 공통
+  'COALESCE', 'NULLIF', 'IIF',
+  'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
+  // 문자열
+  'CONCAT', 'SUBSTR', 'SUBSTRING', 'LENGTH', 'TRIM', 'LTRIM', 'RTRIM',
+  'UPPER', 'LOWER', 'REPLACE', 'INSTR', 'LPAD', 'RPAD', 'TO_CHAR',
+  // 숫자
+  'ROUND', 'TRUNC', 'FLOOR', 'CEIL', 'CEILING', 'MOD', 'ABS', 'SIGN',
+  'POWER', 'SQRT', 'TO_NUMBER',
+  // 날짜
+  'TO_DATE', 'SYSDATE', 'NOW', 'CURRENT_DATE', 'CURRENT_TIMESTAMP',
+  'DATEADD', 'DATEDIFF', 'DATE_FORMAT', 'EXTRACT',
+  // 집계 / 윈도우
+  'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
+  'ROW_NUMBER', 'RANK', 'DENSE_RANK', 'NTILE',
+  'LAG', 'LEAD', 'FIRST_VALUE', 'LAST_VALUE',
+  // 형변환
+  'CAST', 'CONVERT',
+  // 기타
+  'ISNULL', 'IFNULL', 'GREATEST', 'LEAST',
+]
+
+// ─────────────────────────────────────────────────
 // Auto 포매팅 대상 절 키워드 목록 (alias 체크용)
 // ─────────────────────────────────────────────────
 export const AUTO_CLAUSE_KEYWORDS: string[] = [
@@ -84,11 +113,25 @@ export function extractSubqueries(sql: string): ExtractResult {
         // aliasRaw가 순수 공백만 있거나 비어있으면 alias 없음
         const alias = aliasRaw.trim()
 
-        // alias가 SQL 키워드이거나 비어있으면 alias로 취급하지 않음
-        const isKeyword = AUTO_CLAUSE_KEYWORDS.some(
-          kw => kw.toUpperCase() === alias.toUpperCase()
+        // alias 무효 조건:
+        //   1) 비어있음
+        //   2) 절 키워드 (SELECT, FROM, WHERE 등)
+        //   3) SQL 함수명 (DECODE, NVL, COALESCE 등)
+        //   4) alias 직후 문자가 '(' → 함수 호출이므로 alias가 아님
+        const aliasUpper = alias.toUpperCase()
+        const isClauseKeyword = AUTO_CLAUSE_KEYWORDS.some(
+          kw => kw.toUpperCase() === aliasUpper
         )
-        const validAlias = alias && !isKeyword ? alias : ''
+        const isFunctionKeyword = SQL_FUNCTION_KEYWORDS.some(
+          fn => fn.toUpperCase() === aliasUpper
+        )
+        const afterAlias = afterParen.slice(aliasRaw.length).trimStart()
+        const isFollowedByParen = afterAlias.startsWith('(')
+
+        const validAlias =
+          alias && !isClauseKeyword && !isFunctionKeyword && !isFollowedByParen
+            ? alias
+            : ''
         const validAliasRaw = validAlias ? aliasRaw : ''
 
         blocks.push({ key, inner, alias: validAlias })
@@ -108,33 +151,18 @@ export function extractSubqueries(sql: string): ExtractResult {
 // ─────────────────────────────────────────────────
 // 서브쿼리 복원기
 // ─────────────────────────────────────────────────
+// formatInner 콜백: (inner, baseIndent) → 포매팅된 내부 SQL
+//   baseIndent : 해당 서브쿼리 블록의 닫는 ')' 기준 들여쓰기 문자열.
+//                내부 줄은 baseIndent + 1단계를 적용해야 한다.
 export function restoreSubqueries(
-  sql: string, 
-  subBlocks: SubBlock[], 
-  _cfg: FormatterConfig,
-  formatInner?: (inner: string) => string
+  sql: string,
+  subBlocks: SubBlock[],
+  cfg: FormatterConfig,
+  formatInner?: (inner: string, baseIndent: string) => string
 ): string {
   let result = sql
 
   for (const sub of subBlocks) {
-    const lines = result.split('\n')
-    let subqBaseIndent = ''
-
-    for (const line of lines) {
-      const idx = line.indexOf(sub.key)
-      if (idx !== -1) {
-        subqBaseIndent = ' '.repeat(idx)
-        break
-      }
-    }
-
-    // 내부 포매팅 콜백이 있으면 적용, 없으면 원본 사용
-    const formattedInner = formatInner ? formatInner(sub.inner) : sub.inner
-
-    const closingIndent = subqBaseIndent.length > 0
-      ? ' '.repeat(subqBaseIndent.length - 1)
-      : ''
-
     const aliasStr = sub.alias ? `  ${sub.alias}` : ''
 
     const resultLines = result.split('\n')
@@ -151,6 +179,31 @@ export function restoreSubqueries(
       const after = line.slice(idx + sub.key.length)
       const beforeTrimmed = before.trimEnd()
       const hasParen = beforeTrimmed.endsWith('(')
+
+      // ── 닫는 ')' 의 기준 들여쓰기 ──────────────────────────────
+      // hasParen : '(' 바로 앞 문자열의 leading whitespace
+      // 그 외    : 현재 라인의 leading whitespace
+      // 탭/스페이스 혼용을 보존하기 위해 실제 문자를 슬라이스한다.
+      const closingIndent = (() => {
+        if (hasParen) {
+          const withoutParen = beforeTrimmed.slice(0, -1)
+          return withoutParen.match(/^(\s*)/)?.[1] ?? ''
+        }
+        return line.match(/^(\s*)/)?.[1] ?? ''
+      })()
+
+      // 내부 들여쓰기 단위 (탭 or 스페이스 N칸)
+      const innerIndentUnit = cfg.indentType === 'tabs'
+        ? '\t'
+        : ' '.repeat(cfg.tabWidth)
+      // 서브쿼리 내부 줄의 baseIndent = closingIndent + 1단계
+      const innerBaseIndent = closingIndent + innerIndentUnit
+
+      // formatInner 콜백으로 내부 SQL 포매팅 (baseIndent 전달)
+      const formattedInner = formatInner
+        ? formatInner(sub.inner, innerBaseIndent)
+        : indentBlock(sub.inner, innerBaseIndent)
+
       const innerLines = formattedInner.split('\n')
 
       if (hasParen) {
@@ -171,6 +224,17 @@ export function restoreSubqueries(
   return result
 }
 
+/**
+ * 내부 SQL 블록의 각 줄 앞에 baseIndent 를 붙인다.
+ * formatInner 콜백이 없을 때 기본 들여쓰기 적용용.
+ */
+export function indentBlock(sql: string, baseIndent: string): string {
+  return sql
+    .split('\n')
+    .map(line => (line.trim() ? baseIndent + line.trim() : ''))
+    .join('\n')
+}
+
 // ─────────────────────────────────────────────────
 // 키워드 기준 줄바꿈 (서브쿼리 내용 평탄화용)
 // ─────────────────────────────────────────────────
@@ -185,9 +249,57 @@ export function presplitByKeywords(sql: string, cfg: FormatterConfig): string {
     // RegExp 생성자 사용으로 $ 이스케이프 문제 방지
     const pattern = '([ \\t]+)(' + kw.replace(/ /g, '[ \\t]+') + ')(?=[ \\t]|$)'
     const re = new RegExp(pattern, 'gi')
-    result = result.replace(re, (_match, _space, kword) => '\n' + kword)
+
+    // 괄호 깊이를 추적하여 괄호 내부(함수 인자 등)의 키워드는 줄바꿈하지 않음
+    result = splitRespectingParens(result, re)
   }
   return result
+}
+
+/**
+ * 정규식 매치 위치의 괄호 깊이를 확인하여
+ * depth === 0 인 경우에만 줄바꿈을 삽입한다.
+ * - depth > 0  : DECODE/NVL 등의 함수 인자 내부 → 통과
+ * - 문자열 리터럴('...') 내부의 괄호·키워드도 무시한다.
+ */
+function splitRespectingParens(sql: string, re: RegExp): string {
+  re.lastIndex = 0
+  const parts: string[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = re.exec(sql)) !== null) {
+    const matchStart = match.index
+
+    // match 시작 위치까지 괄호 깊이 계산
+    // 문자열 리터럴('...') 내부는 건너뜀
+    let depth = 0
+    let inString = false
+    for (let i = 0; i < matchStart; i++) {
+      const ch = sql[i]
+      if (inString) {
+        if (ch === "'") {
+          // 이스케이프된 '' 처리
+          if (sql[i + 1] === "'") { i++; continue }
+          inString = false
+        }
+        continue
+      }
+      if (ch === "'") { inString = true; continue }
+      if (ch === '(') depth++
+      else if (ch === ')') depth--
+    }
+
+    if (depth === 0) {
+      parts.push(sql.slice(lastIndex, matchStart))
+      parts.push('\n' + match[2]) // match[2] = 키워드
+      lastIndex = matchStart + match[0].length
+    }
+    // depth > 0 이면 그냥 통과
+  }
+
+  parts.push(sql.slice(lastIndex))
+  return parts.join('')
 }
 
 // ─────────────────────────────────────────────────

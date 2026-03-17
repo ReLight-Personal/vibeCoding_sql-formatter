@@ -109,7 +109,31 @@ AST를 순회하며 설정에 따라 포매팅된 SQL 문자열을 생성한다.
 - `<where>` / `<set>` 태그: sentinel 키워드 삽입으로 파서가 WHERE/SET 절을 올바르게 인식
 - `templateType: 'mybatis'` 옵션 또는 자동 감지로 활성화
 
-### 4. AutoIndentFormatter (`core/autoIndentFormatter.ts`)
+### 4. SubqueryUtils (`core/subqueryUtils.ts`)
+
+`formatter.ts`와 `autoIndentFormatter.ts`가 공유하는 서브쿼리 처리 유틸리티.
+
+**주요 export**
+
+| 함수 / 상수 | 설명 |
+|-------------|------|
+| `extractSubqueries(sql)` | 안→밖 순서로 서브쿼리를 플레이스홀더로 추출 |
+| `restoreSubqueries(sql, blocks, cfg, formatInner?)` | 플레이스홀더를 포매팅된 서브쿼리로 복원, `baseIndent` 전달로 `(` 위치 정렬 |
+| `indentBlock(sql, baseIndent)` | SQL 블록 각 줄 앞에 `baseIndent` 적용 |
+| `presplitByKeywords(sql, cfg)` | 절 키워드 기준 줄바꿈 (괄호·문자열 리터럴 내부 보호) |
+| `applyCase(keyword, cfg)` | 키워드 대소문자 변환 |
+| `AUTO_CLAUSE_KEYWORDS` | 줄바꿈 대상 절 키워드 목록 |
+| `SQL_FUNCTION_KEYWORDS` | alias 오탐 방지용 SQL 함수명 목록 |
+
+**alias 오탐 방지 규칙**
+
+서브쿼리 바로 뒤의 토큰을 alias로 인정하지 않는 조건:
+1. 비어있음
+2. 절 키워드 (`FROM`, `WHERE`, `AND` 등)
+3. SQL 함수명 (`DECODE`, `NVL`, `COALESCE` 등)
+4. 해당 토큰 직후 문자가 `(` → 함수 호출
+
+### 5. AutoIndentFormatter (`core/autoIndentFormatter.ts`)
 
 `indentType: 'auto'` 선택 시 SqlFormatter 기본 출력에 추가 적용되는 후처리 엔진.
 
@@ -293,6 +317,9 @@ interface FormatterConfig {
 - [x] 콤마 위치 제어 (leading / trailing)
 - [x] 연산자 공백 제어 (denseOperators)
 - [x] **Auto 들여쓰기** (Rule 1~4, 서브쿼리 재귀 정렬)
+- [x] **서브쿼리 유틸리티** (`subqueryUtils.ts`) — 추출·복원·들여쓰기 공유 로직 분리
+- [x] **비-auto 서브쿼리 포매팅** — `autoIndent: false` 시에도 서브쿼리 들여쓰기 정상 적용
+- [x] **SQL 함수 alias 오탐 방지** — DECODE, NVL, COALESCE 등 함수명을 alias로 오인하지 않음
 - [x] SQL 방언 자동 감지 및 유효성 검사
 
 ### ⏳ 예정
@@ -314,9 +341,10 @@ sql-formatter/
 │   ├── tokenizer.ts              # SqlTokenizer
 │   ├── parser.ts                 # SqlParser
 │   ├── formatter.ts              # SqlFormatter + MyBatisTemplateHandler
-│   └── autoIndentFormatter.ts    # Auto 들여쓰기 후처리 엔진 ← 신규
+│   ├── autoIndentFormatter.ts    # Auto 들여쓰기 후처리 엔진
+│   └── subqueryUtils.ts          # 서브쿼리 추출·복원·들여쓰기 유틸리티 (공유)
 └── types/
-    ├── config.ts                 # FormatterConfig, FormatOptions (IndentType에 'auto' 추가)
+    ├── config.ts                 # FormatterConfig, FormatOptions
     └── token.ts                  # SqlToken, TokenType
 ```
 
