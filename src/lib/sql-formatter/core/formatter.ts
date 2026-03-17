@@ -4,6 +4,7 @@ import type { AstNode } from './parser'
 import { SqlTokenizer } from './tokenizer'
 import { SqlParser } from './parser'
 import { applyAutoIndent } from './autoIndentFormatter'
+import { extractSubqueries, restoreSubqueries, presplitByKeywords } from './subqueryUtils'
 
 // ─────────────────────────────────────────────────
 // MyBatis 템플릿 처리기
@@ -705,7 +706,50 @@ export class SqlFormatter {
   // ─────────────────────────────────────────────────
   private formatSubquery(node: AstNode, cfg: FormatterConfig, indent: number): string {
     const selNode = node.children?.find(c => c.type === 'select_statement')
-    if (selNode) return this.formatSelectStatement(selNode, cfg, indent)
+    if (selNode) {
+      // 서브쿼리 내용을 먼저 기본 포매팅으로 평탄화
+      let flattened = this.formatSelectStatement(selNode, cfg, 0)
+      
+      // 키워드 기준으로 미리 줄바꿈 적용
+      flattened = presplitByKeywords(flattened, cfg)
+      
+      // 서브쿼리 처리 유틸리티 적용
+      const extracted = extractSubqueries(flattened)
+      if (extracted.subBlocks.length > 0) {
+        // 중첩 서브쿼리가 있으면 재귀적으로 처리
+        const processed = restoreSubqueries(
+          extracted.sql, 
+          extracted.subBlocks, 
+          cfg,
+          (inner) => {
+            // 내부 서브쿼리도 동일한 방식으로 처리
+            const innerExtracted = extractSubqueries(inner)
+            if (innerExtracted.subBlocks.length > 0) {
+              return restoreSubqueries(
+                innerExtracted.sql, 
+                innerExtracted.subBlocks, 
+                cfg
+              )
+            }
+            return inner
+          }
+        )
+        // 들여쓰기 적용
+        const lines = processed.split('\n')
+        const indentedLines = lines.map(line => 
+          line.trim() ? this.indent(cfg, indent) + line.trim() : ''
+        )
+        return indentedLines.join('\n').trim()
+      }
+      
+      // 단순 서브쿼리는 기본 들여쓰기만 적용
+      const lines = flattened.split('\n')
+      const indentedLines = lines.map(line => 
+        line.trim() ? this.indent(cfg, indent) + line.trim() : ''
+      )
+      return indentedLines.join('\n').trim()
+    }
+    
     // generic fallback
     const inner = node.tokens
       .filter(t => t.value !== '(' && t.value !== ')')
